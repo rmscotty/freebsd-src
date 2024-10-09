@@ -346,8 +346,12 @@ fuse_internal_cache_attrs(struct vnode *vp, struct fuse_attr *attr,
 		vp_cache_at->va_blocksize = PAGE_SIZE;
 	vp_cache_at->va_type = IFTOVT(attr->mode);
 	vp_cache_at->va_bytes = attr->blocks * S_BLKSIZE;
-	vp_cache_at->va_flags = 0;
 
+#if defined(__FreeBSD__)
+	vp_cache_at->va_flags = attr->flags;
+#else
+	vp_cache_at->va_flags = 0;
+#endif
 	if (vap != vp_cache_at && vap != NULL)
 		memcpy(vap, vp_cache_at, sizeof(*vap));
 }
@@ -1207,6 +1211,14 @@ int fuse_internal_setattr(struct vnode *vp, struct vattr *vap,
 		fsai->mode = vap->va_mode & ALLPERMS;
 		fsai->valid |= FATTR_MODE;
 	}
+	if (vap->va_flags != VNOVAL) {
+		// printf("flags in: %lu\n", vap->va_flags);
+		err = fuse_internal_chflags(vp, vap->va_flags, cred, td);
+		if (err == 0) {
+			fsai->flags |= vap->va_flags;
+			fsai->valid |= FATTR_FLAGS;
+		}
+	}
 	if (!fsai->valid) {
 		goto out;
 	}
@@ -1247,6 +1259,67 @@ out:
 	fdisp_destroy(&fdi);
 	return err;
 }
+
+/*
+ * The file whose name is given by path or referenced by the descriptor fd
+ * has its flags changed to flags.
+ */
+int
+fuse_internal_chflags(struct vnode *vp, uint64_t flags, struct ucred *cred, struct thread *td)
+{
+
+	/* most of it is copied form tmpfs_subr.c */
+	int error;
+	struct fuse_vnode_data *node = VTOFUD(vp);
+	struct mount *mp = vnode_mount(vp);
+	struct fuse_data *data = fuse_get_mpdata(mp);
+	int default_permissions = data->dataflags & FSESS_DEFAULT_PERMISSIONS;
+
+	ASSERT_VOP_ELOCKED(vp, "chflags");
+
+	/* flags are legal? */
+	if ((flags & ~(SF_APPEND | SF_ARCHIVED | SF_IMMUTABLE | SF_NOUNLINK |
+		       UF_APPEND | UF_ARCHIVE | UF_HIDDEN | UF_IMMUTABLE | UF_NODUMP |
+		       UF_NOUNLINK | UF_OFFLINE | UF_OPAQUE | UF_READONLY | UF_REPARSE |
+		       UF_SPARSE | UF_SYSTEM)) != 0)
+		return (EOPNOTSUPP);
+
+
+	if (default_permissions) {
+		// printf("Default permissions\n");
+		/*
+		 * Unprivileged processes are not permitted to unset system
+		 * flags, or modify flags if any system flags are set.
+		 */
+		if (!priv_check_cred(cred, PRIV_VFS_SYSFLAGS)) {
+			if (node->flag &
+			    (SF_NOUNLINK | SF_IMMUTABLE | SF_APPEND)) {
+				error = securelevel_gt(cred, 0);
+				if (error)
+					return (error);
+			}
+		}
+		else {
+			if (node->flag &
+			    (SF_NOUNLINK | SF_IMMUTABLE | SF_APPEND) ||
+			    ((flags ^ node->flag) & SF_SETTABLE))
+				return (EPERM);
+		}
+	}
+	else {
+		// printf("No default_permissions, the fs is going to handle all the checks\n");
+		/* else let the fs do the checks */
+		if ((error = fuse_internal_access(vp, VADMIN, td, cred)))
+			return (error);
+	}
+
+	node->flag = flags;
+	// now i just have to send the flags
+	
+	ASSERT_VOP_ELOCKED(vp, "chflags2");
+	return (0);
+}
+
 
 /*
  * FreeBSD clears the SUID and SGID bits on any write by a non-root user.
