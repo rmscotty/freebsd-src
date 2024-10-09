@@ -390,6 +390,9 @@ struct fuse_file_lock {
 #define FATTR_LOCKOWNER	(1 << 9)
 #define FATTR_CTIME	(1 << 10)
 #define FATTR_KILL_SUIDGID (1 << 11)
+#if defined(__APPLE__) || defined(__FreeBSD__)
+#define FATTR_FLAGS (1 << 31)
+#endif
 
 /**
  * Flags returned by the OPEN request
@@ -737,7 +740,13 @@ enum fuse_notify_code {
 /* The read buffer is required to be at least 8k, but may be much larger */
 #define FUSE_MIN_READ_BUFFER 8192
 
-#define FUSE_COMPAT_ENTRY_OUT_SIZE 120
+
+#ifdef __APPLE__
+#  define FUSE_COMPAT_ENTRY_OUT_SIZE 136
+#else
+#  define FUSE_COMPAT_ENTRY_OUT_SIZE 120
+#endif
+
 
 struct fuse_entry_out {
 	uint64_t	nodeid;		/* Inode ID */
@@ -770,7 +779,12 @@ struct fuse_getattr_in {
 	uint64_t	fh;
 };
 
-#define FUSE_COMPAT_ATTR_OUT_SIZE 96
+
+#ifdef __APPLE__
+#  define FUSE_COMPAT_ATTR_OUT_SIZE 112
+#else
+#  define FUSE_COMPAT_ATTR_OUT_SIZE 96
+#endif
 
 struct fuse_attr_out {
 	uint64_t	attr_valid;	/* Cache timeout for the attributes */
@@ -840,6 +854,9 @@ struct fuse_setattr_in {
 	uint32_t	uid;
 	uint32_t	gid;
 	uint32_t	unused5;
+#if defined(__APPLE__) || defined(__FreeBSD__)
+	uint32_t	flags; /* file flags; see chflags(2) */
+#endif /* defined(__APPLE__) || defined(__FreeBSD__) */  
 };
 
 struct fuse_open_in {
