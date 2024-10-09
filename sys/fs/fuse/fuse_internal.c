@@ -346,12 +346,7 @@ fuse_internal_cache_attrs(struct vnode *vp, struct fuse_attr *attr,
 		vp_cache_at->va_blocksize = PAGE_SIZE;
 	vp_cache_at->va_type = IFTOVT(attr->mode);
 	vp_cache_at->va_bytes = attr->blocks * S_BLKSIZE;
-
-#if defined(__FreeBSD__)
 	vp_cache_at->va_flags = attr->flags;
-#else
-	vp_cache_at->va_flags = 0;
-#endif
 	if (vap != vp_cache_at && vap != NULL)
 		memcpy(vap, vp_cache_at, sizeof(*vap));
 }
