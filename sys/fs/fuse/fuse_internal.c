@@ -1207,12 +1207,8 @@ int fuse_internal_setattr(struct vnode *vp, struct vattr *vap,
 		fsai->valid |= FATTR_MODE;
 	}
 	if (vap->va_flags != VNOVAL) {
-		// printf("flags in: %lu\n", vap->va_flags);
-		err = fuse_internal_chflags(vp, vap->va_flags, cred, td);
-		if (err == 0) {
-			fsai->flags |= vap->va_flags;
-			fsai->valid |= FATTR_FLAGS;
-		}
+		fsai->flags |= vap->va_flags;
+		fsai->valid |= FATTR_FLAGS;
 	}
 	if (!fsai->valid) {
 		goto out;
@@ -1263,12 +1259,9 @@ int
 fuse_internal_chflags(struct vnode *vp, uint64_t flags, struct ucred *cred, struct thread *td)
 {
 
-	/* most of it is copied form tmpfs_subr.c */
+	/* most of it is copied from tmpfs_subr.c and ufs_vnops.c*/
 	int error;
 	struct fuse_vnode_data *node = VTOFUD(vp);
-	struct mount *mp = vnode_mount(vp);
-	struct fuse_data *data = fuse_get_mpdata(mp);
-	int default_permissions = data->dataflags & FSESS_DEFAULT_PERMISSIONS;
 
 	ASSERT_VOP_ELOCKED(vp, "chflags");
 
@@ -1280,35 +1273,28 @@ fuse_internal_chflags(struct vnode *vp, uint64_t flags, struct ucred *cred, stru
 		return (EOPNOTSUPP);
 
 
-	if (default_permissions) {
-		// printf("Default permissions\n");
-		/*
-		 * Unprivileged processes are not permitted to unset system
-		 * flags, or modify flags if any system flags are set.
-		 */
-		if (!priv_check_cred(cred, PRIV_VFS_SYSFLAGS)) {
-			if (node->flag &
-			    (SF_NOUNLINK | SF_IMMUTABLE | SF_APPEND)) {
-				error = securelevel_gt(cred, 0);
-				if (error)
-					return (error);
-			}
+	/*
+	 * Unprivileged processes are not permitted to unset system
+	 * flags, or modify flags if any system flags are set.
+	 */
+	if (!priv_check_cred(cred, PRIV_VFS_SYSFLAGS)) {
+		if (node->cached_attrs.va_flags &
+		    (SF_NOUNLINK | SF_IMMUTABLE | SF_APPEND)) {
+			error = securelevel_gt(cred, 0);
+			if (error)
+				return (error);
 		}
-		else {
-			if (node->flag &
-			    (SF_NOUNLINK | SF_IMMUTABLE | SF_APPEND) ||
-			    ((flags ^ node->flag) & SF_SETTABLE))
-				return (EPERM);
-		}
+
+		/* The snapshot flag cannot be toggled. see chflags(2) */
+		if ((flags ^ node->cached_attrs.va_flags) & SF_SNAPSHOT)
+			return (EPERM);
 	}
 	else {
-		// printf("No default_permissions, the fs is going to handle all the checks\n");
-		/* else let the fs do the checks */
-		if ((error = fuse_internal_access(vp, VADMIN, td, cred)))
-			return (error);
+		if (node->cached_attrs.va_flags &
+		    (SF_NOUNLINK | SF_IMMUTABLE | SF_APPEND) ||
+		    ((flags ^ node->cached_attrs.va_flags) & SF_SETTABLE))
+			return (EPERM);
 	}
-
-	node->flag = flags;
 	// now i just have to send the flags
 	
 	ASSERT_VOP_ELOCKED(vp, "chflags2");

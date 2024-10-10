@@ -2361,6 +2361,15 @@ fuse_vnop_setattr(struct vop_setattr_args *ap)
 		accmode |= VADMIN;
 	}
 
+	if (vap->va_flags != VNOVAL) {
+		if (checkperm) {
+			err = fuse_internal_chflags(vp, vap->va_flags, cred, td);
+			if (err)
+				return (err);
+		}
+		accmode |= VADMIN;
+	}
+
 	if (vfs_isrdonly(mp))
 		return EROFS;
 
