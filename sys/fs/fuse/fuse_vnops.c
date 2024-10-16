@@ -1440,6 +1440,8 @@ fuse_vnop_link(struct vop_link_args *ap)
 	struct fuse_dispatcher fdi;
 	struct fuse_entry_out *feo;
 	struct fuse_link_in fli;
+	struct vattr vattr;
+	struct fuse_data *data;
 
 	int err;
 
@@ -1460,6 +1462,18 @@ fuse_vnop_link(struct vop_link_args *ap)
 	if (vap != NULL && vap->va_nlink >= FUSE_LINK_MAX)
 		return (EMLINK);
 	fli.oldnodeid = VTOI(vp);
+
+	
+	data = fuse_get_mpdata(vnode_mount(vp));
+	if (data->dataflags & FSESS_DEFAULT_PERMISSIONS) {
+		err = fuse_internal_getattr(vp, &vattr, cnp->cn_cred, curthread);
+		if (err)
+			return (err);
+		if (vattr.va_flags & (IMMUTABLE | APPEND)) {
+			return (EPERM);
+		}
+	}
+
 
 	fdisp_init(&fdi, 0);
 	fuse_internal_newentry_makerequest(vnode_mount(tdvp), VTOI(tdvp), cnp,
@@ -1845,12 +1859,36 @@ fuse_vnop_open(struct vop_open_args *ap)
 	struct ucred *cred = ap->a_cred;
 	pid_t pid = td->td_proc->p_pid;
 
+	/* need this for def checking */
+	bool checkperm;
+	struct mount *mp;
+	struct fuse_data *data;
+	int dataflags;
+	struct vattr attr;
+	
+	mp = vnode_mount(vp);
+	data = fuse_get_mpdata(mp);
+	dataflags = data->dataflags;
+	checkperm = dataflags & FSESS_DEFAULT_PERMISSIONS;
+
 	if (fuse_isdeadfs(vp))
 		return (EXTERROR(ENXIO, "This FUSE session is about "
 		    "to be closed"));
 	if (VN_ISDEV(vp) || vp->v_type == VFIFO)
 		return (EXTERROR(EOPNOTSUPP, "Unsupported vnode type",
 		    vp->v_type));
+		return ENXIO;
+
+	/* if default_permissions and file is append only, deny write requests */
+	if (checkperm) {
+		int error = fuse_internal_getattr(vp, &attr, cred, td);
+		if (error)
+			return (error);
+		if (attr.va_flags & APPEND &&
+		    (a_mode & (FWRITE | O_APPEND)) == FWRITE)
+			return (EPERM);
+	}	
+
 	if ((a_mode & (FREAD | FWRITE | FEXEC)) == 0)
 		return (EXTERROR(EINVAL, "Illegal mode", a_mode));
 
@@ -2221,13 +2259,30 @@ fuse_vnop_remove(struct vop_remove_args *ap)
 	struct vnode *dvp = ap->a_dvp;
 	struct vnode *vp = ap->a_vp;
 	struct componentname *cnp = ap->a_cnp;
-
+	struct fuse_data *data;
+	
+	struct vattr vattr, dattr;
 	int err;
 
 	if (fuse_isdeadfs(vp)) {
 		return (EXTERROR(ENXIO, "This FUSE session is about "
 		    "to be closed"));
 	}
+
+	data = fuse_get_mpdata(vnode_mount(vp));
+	if (data->dataflags & FSESS_DEFAULT_PERMISSIONS) {
+		err = fuse_internal_getattr(vp, &vattr, cnp->cn_cred, curthread);
+		if (err)
+			return (err);
+		err = fuse_internal_getattr(dvp, &dattr, cnp->cn_cred, curthread);
+		if (err)
+			return (err);
+		
+		if ((vattr.va_flags & (NOUNLINK | IMMUTABLE | APPEND)) ||
+		    (dattr.va_flags & APPEND))
+			return (EPERM);
+	}
+	
 	if (vnode_isdir(vp)) {
 		return (EXTERROR(EPERM, "vnode is a directory"));
 	}
@@ -2259,6 +2314,7 @@ fuse_vnop_rename(struct vop_rename_args *ap)
 	struct vnode *tvp = ap->a_tvp;
 	struct componentname *tcnp = ap->a_tcnp;
 	struct fuse_data *data;
+	struct vattr  vattr, dvattr;
 	bool newparent = fdvp != tdvp;
 	bool isdir = fvp->v_type == VDIR;
 	int locktype;
@@ -2311,12 +2367,49 @@ fuse_vnop_rename(struct vop_rename_args *ap)
 		goto out;
 	}
 
-	if (data->dataflags & FSESS_DEFAULT_PERMISSIONS && isdir && newparent) {
-		err = fuse_internal_access(fvp, VWRITE,
-			curthread, tcnp->cn_cred);
+	if (data->dataflags & FSESS_DEFAULT_PERMISSIONS) {
+		if (tvp) {
+			err = fuse_internal_getattr(
+				tvp, &vattr, tcnp->cn_cred, curthread);
+			if (err)
+				goto out;
+
+			err = fuse_internal_getattr(
+				tdvp, &dvattr, tcnp->cn_cred, curthread);
+			if (err)
+				goto out;
+			
+			if ((vattr.va_flags & (NOUNLINK | IMMUTABLE | APPEND)) ||
+			    (dvattr.va_flags & (APPEND | IMMUTABLE))) {
+				err = EPERM;
+				goto out;
+			}
+		}
+		err = fuse_internal_getattr(
+			fvp, &vattr, tcnp->cn_cred, curthread);
 		if (err)
-			goto unlock;
+			goto out;
+		
+		err = fuse_internal_getattr(
+			fdvp, &dvattr, tcnp->cn_cred, curthread);
+		if (err)
+			goto out;
+		
+		if ((vattr.va_flags & (NOUNLINK | IMMUTABLE | APPEND)) ||
+		    (dvattr.va_flags & (APPEND | IMMUTABLE))) {
+			err = EPERM;
+			goto out;
+		}
+
+		if (isdir && newparent) {
+			err = fuse_internal_access(
+				fvp, VWRITE, curthread, tcnp->cn_cred);
+			if (err)
+				goto unlock;
+		}
+
 	}
+	
 	err = fuse_internal_rename(fdvp, fcnp, tdvp, tcnp);
 	if (err == 0) {
 		if (tdvp != fdvp)
@@ -2328,6 +2421,8 @@ fuse_vnop_rename(struct vop_rename_args *ap)
 	if (tvp != NULL && tvp != fvp) {
 		cache_purge(tvp);
 	}
+
+	
 	if (vnode_isdir(fvp)) {
 		if (((tvp != NULL) && vnode_isdir(tvp)) || vnode_isdir(fvp)) {
 			cache_purge(tdvp);
@@ -2363,8 +2458,14 @@ fuse_vnop_rmdir(struct vop_rmdir_args *ap)
 {
 	struct vnode *dvp = ap->a_dvp;
 	struct vnode *vp = ap->a_vp;
-
 	int err;
+
+	struct mount *mp;
+	struct fuse_data *data;
+	struct vattr dattr, iattr;
+	
+	mp = vnode_mount(vp);
+	data = fuse_get_mpdata(mp);
 
 	if (fuse_isdeadfs(vp)) {
 		return (EXTERROR(ENXIO, "This FUSE session is about "
@@ -2374,6 +2475,24 @@ fuse_vnop_rmdir(struct vop_rmdir_args *ap)
 		return (EXTERROR(EINVAL, "Directory to be removed "
 		    "contains itself"));
 	}
+
+
+	if (data->dataflags & FSESS_DEFAULT_PERMISSIONS) {
+		err = fuse_internal_getattr(
+			dvp, &dattr, ap->a_cnp->cn_cred, curthread);
+		if (err)
+			return (err);
+		err = fuse_internal_getattr(
+			vp, &iattr, ap->a_cnp->cn_cred, curthread);
+		if (err)
+			return (err);
+
+		if ((dattr.va_flags & APPEND)
+		    || (iattr.va_flags & (NOUNLINK | IMMUTABLE | APPEND)))
+			return (EPERM);
+
+	}
+	
 	err = fuse_internal_remove(dvp, vp, ap->a_cnp, FUSE_RMDIR);
 
 	return err;
@@ -2412,7 +2531,74 @@ fuse_vnop_setattr(struct vop_setattr_args *ap)
 		return (EXTERROR(ENXIO, "This FUSE session is about "
 		    "to be closed"));
 	}
+	if (vap->va_flags != VNOVAL) {
 
+		if (checkperm) {
+			if (vfs_isrdonly(mp))
+				return (EROFS);
+
+			if ((vap->va_flags & ~(SF_APPEND | SF_ARCHIVED | SF_IMMUTABLE |
+					       SF_NOUNLINK | SF_SNAPSHOT | UF_APPEND | UF_ARCHIVE |
+					       UF_HIDDEN | UF_IMMUTABLE | UF_NODUMP | UF_NOUNLINK |
+					       UF_OFFLINE | UF_OPAQUE | UF_READONLY | UF_REPARSE |
+					       UF_SPARSE | UF_SYSTEM)) != 0)
+				return (EOPNOTSUPP);
+
+			/* check for vadmin right and get the attrs */
+			err = fuse_internal_access(vp, VADMIN, td, cred);
+			if (err)
+				return (err);
+			err2 = fuse_internal_getattr(vp, &old_va, cred, td);
+			if (err2)
+				return (err2);
+
+			/*
+			 * Unprivileged processes are not permitted to unset system
+			 * flags, or modify flags if any system flags are set.
+			 */
+			if (!priv_check_cred(cred, PRIV_VFS_SYSFLAGS)) {
+				if (old_va.va_flags &
+				    (SF_NOUNLINK | SF_IMMUTABLE | SF_APPEND)) {
+					err = securelevel_gt(cred, 0);
+					if (err)
+						return (err);
+				}
+				/* The snapshot flag cannot be toggled. */
+				if ((vap->va_flags ^ old_va.va_flags) & SF_SNAPSHOT)
+					return (EPERM);
+			} else {
+				if (old_va.va_flags &
+				    (SF_NOUNLINK | SF_IMMUTABLE | SF_APPEND) ||
+				    ((vap->va_flags ^ old_va.va_flags) & SF_SETTABLE))
+					return (EPERM);
+			}
+		} /* else let the FS do the checks */
+
+		/* set the flags */
+		struct vattr flags;
+		VATTR_NULL(&flags);
+		flags.va_flags = vap->va_flags;
+		err = fuse_internal_setattr(vp, &flags, td, cred);
+		if (err)
+			return (err);
+	}
+
+	if (checkperm) {
+		err = fuse_internal_getattr(vp, &old_va, cred, td);
+		if (err)
+			return (err);
+
+		/* from ufs_vnops */
+		/*
+		 * If immutable or append, no one can change any of its attributes
+		 * except the ones already handled (in some cases, file flags
+		 * including the immutability flags themselves for the superuser).
+		 */
+		if (old_va.va_flags & (IMMUTABLE | APPEND)) {
+			return (EPERM);
+		}
+	}
+	
 	if (vap->va_uid != (uid_t)VNOVAL) {
 		if (checkperm) {
 			/* Only root may change a file's owner */
@@ -2506,15 +2692,6 @@ fuse_vnop_setattr(struct vop_setattr_args *ap)
 				if (err)
 					return (err);
 			}
-		}
-		accmode |= VADMIN;
-	}
-
-	if (vap->va_flags != VNOVAL) {
-		if (checkperm) {
-			err = fuse_internal_chflags(vp, vap->va_flags, cred, td);
-			if (err)
-				return (err);
 		}
 		accmode |= VADMIN;
 	}
