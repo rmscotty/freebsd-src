@@ -1252,57 +1252,6 @@ out:
 }
 
 /*
- * The file whose name is given by path or referenced by the descriptor fd
- * has its flags changed to flags.
- */
-int
-fuse_internal_chflags(struct vnode *vp, uint64_t flags, struct ucred *cred, struct thread *td)
-{
-
-	/* most of it is copied from tmpfs_subr.c and ufs_vnops.c*/
-	int error;
-	struct fuse_vnode_data *node = VTOFUD(vp);
-
-	ASSERT_VOP_ELOCKED(vp, "chflags");
-
-	/* flags are legal? */
-	if ((flags & ~(SF_APPEND | SF_ARCHIVED | SF_IMMUTABLE | SF_NOUNLINK |
-		       UF_APPEND | UF_ARCHIVE | UF_HIDDEN | UF_IMMUTABLE | UF_NODUMP |
-		       UF_NOUNLINK | UF_OFFLINE | UF_OPAQUE | UF_READONLY | UF_REPARSE |
-		       UF_SPARSE | UF_SYSTEM)) != 0)
-		return (EOPNOTSUPP);
-
-
-	/*
-	 * Unprivileged processes are not permitted to unset system
-	 * flags, or modify flags if any system flags are set.
-	 */
-	if (!priv_check_cred(cred, PRIV_VFS_SYSFLAGS)) {
-		if (node->cached_attrs.va_flags &
-		    (SF_NOUNLINK | SF_IMMUTABLE | SF_APPEND)) {
-			error = securelevel_gt(cred, 0);
-			if (error)
-				return (error);
-		}
-
-		/* The snapshot flag cannot be toggled. see chflags(2) */
-		if ((flags ^ node->cached_attrs.va_flags) & SF_SNAPSHOT)
-			return (EPERM);
-	}
-	else {
-		if (node->cached_attrs.va_flags &
-		    (SF_NOUNLINK | SF_IMMUTABLE | SF_APPEND) ||
-		    ((flags ^ node->cached_attrs.va_flags) & SF_SETTABLE))
-			return (EPERM);
-	}
-	// now i just have to send the flags
-	
-	ASSERT_VOP_ELOCKED(vp, "chflags2");
-	return (0);
-}
-
-
-/*
  * FreeBSD clears the SUID and SGID bits on any write by a non-root user.
  */
 void

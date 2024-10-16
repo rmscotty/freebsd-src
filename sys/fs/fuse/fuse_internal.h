@@ -310,9 +310,6 @@ void fuse_internal_newentry_makerequest(struct mount *mp, uint64_t dnid,
 int fuse_internal_newentry_core(struct vnode *dvp, struct vnode **vpp,
     struct componentname *cnp, __enum_uint8(vtype) vtyp, struct fuse_dispatcher *fdip);
 
-int fuse_internal_chflags(struct vnode *vp, uint64_t flags, struct ucred *cred,
-				 struct thread *td);
-
 /* entity destruction */
 
 int fuse_internal_forget_callback(struct fuse_ticket *tick, struct uio *uio);
