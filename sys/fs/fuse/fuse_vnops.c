@@ -2314,7 +2314,7 @@ fuse_vnop_rename(struct vop_rename_args *ap)
 	struct vnode *tvp = ap->a_tvp;
 	struct componentname *tcnp = ap->a_tcnp;
 	struct fuse_data *data;
-	struct vattr  vattr, dvattr;
+	struct vattr  fvattr, fdvattr, tvattr, tdvattr;
 	bool newparent = fdvp != tdvp;
 	bool isdir = fvp->v_type == VDIR;
 	int locktype;
@@ -2370,33 +2370,33 @@ fuse_vnop_rename(struct vop_rename_args *ap)
 	if (data->dataflags & FSESS_DEFAULT_PERMISSIONS) {
 		if (tvp) {
 			err = fuse_internal_getattr(
-				tvp, &vattr, tcnp->cn_cred, curthread);
+				tvp, &tvattr, tcnp->cn_cred, curthread);
 			if (err)
 				goto out;
 
 			err = fuse_internal_getattr(
-				tdvp, &dvattr, tcnp->cn_cred, curthread);
+				tdvp, &tdvattr, tcnp->cn_cred, curthread);
 			if (err)
 				goto out;
 			
-			if ((vattr.va_flags & (NOUNLINK | IMMUTABLE | APPEND)) ||
-			    (dvattr.va_flags & (APPEND | IMMUTABLE))) {
+			if ((tvattr.va_flags & (NOUNLINK | IMMUTABLE | APPEND)) ||
+			    (tdvattr.va_flags & (APPEND | IMMUTABLE))) {
 				err = EPERM;
 				goto out;
 			}
 		}
 		err = fuse_internal_getattr(
-			fvp, &vattr, tcnp->cn_cred, curthread);
+			fvp, &fvattr, tcnp->cn_cred, curthread);
 		if (err)
 			goto out;
 		
 		err = fuse_internal_getattr(
-			fdvp, &dvattr, tcnp->cn_cred, curthread);
+			fdvp, &fdvattr, tcnp->cn_cred, curthread);
 		if (err)
 			goto out;
 		
-		if ((vattr.va_flags & (NOUNLINK | IMMUTABLE | APPEND)) ||
-		    (dvattr.va_flags & (APPEND | IMMUTABLE))) {
+		if ((fvattr.va_flags & (NOUNLINK | IMMUTABLE | APPEND)) ||
+		    (tdvattr.va_flags & (APPEND | IMMUTABLE))) {
 			err = EPERM;
 			goto out;
 		}
@@ -2531,12 +2531,10 @@ fuse_vnop_setattr(struct vop_setattr_args *ap)
 		return (EXTERROR(ENXIO, "This FUSE session is about "
 		    "to be closed"));
 	}
+	
 	if (vap->va_flags != VNOVAL) {
 
 		if (checkperm) {
-			if (vfs_isrdonly(mp))
-				return (EROFS);
-
 			if ((vap->va_flags & ~(SF_APPEND | SF_ARCHIVED | SF_IMMUTABLE |
 					       SF_NOUNLINK | SF_SNAPSHOT | UF_APPEND | UF_ARCHIVE |
 					       UF_HIDDEN | UF_IMMUTABLE | UF_NODUMP | UF_NOUNLINK |
@@ -2544,7 +2542,10 @@ fuse_vnop_setattr(struct vop_setattr_args *ap)
 					       UF_SPARSE | UF_SYSTEM)) != 0)
 				return (EOPNOTSUPP);
 
-			/* check for vadmin right and get the attrs */
+			if (vfs_isrdonly(mp))
+				return EROFS;
+
+			/* check for vadmin rights and get the attrs */
 			err = fuse_internal_access(vp, VADMIN, td, cred);
 			if (err)
 				return (err);
@@ -2575,12 +2576,13 @@ fuse_vnop_setattr(struct vop_setattr_args *ap)
 		} /* else let the FS do the checks */
 
 		/* set the flags */
-		struct vattr flags;
-		VATTR_NULL(&flags);
-		flags.va_flags = vap->va_flags;
-		err = fuse_internal_setattr(vp, &flags, td, cred);
-		if (err)
-			return (err);
+		
+		/* struct vattr flags; */
+		/* VATTR_NULL(&flags); */
+		/* flags.va_flags = vap->va_flags; */
+		/* err = fuse_internal_setattr(vp, &flags, td, cred); */
+		/* if (err) */
+		/* 	return (err); */
 	}
 
 	if (checkperm) {
