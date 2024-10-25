@@ -192,21 +192,17 @@ sctp_find_ifn(void *ifn, uint32_t ifn_index)
 	struct sctp_ifn *sctp_ifnp;
 	struct sctp_ifnlist *hash_ifn_head;
 
-	/*
-	 * We assume the lock is held for the addresses if that's wrong
-	 * problems could occur :-)
-	 */
 	SCTP_IPI_ADDR_LOCK_ASSERT();
 	hash_ifn_head = &SCTP_BASE_INFO(vrf_ifn_hash)[(ifn_index & SCTP_BASE_INFO(vrf_ifn_hashmark))];
 	LIST_FOREACH(sctp_ifnp, hash_ifn_head, next_bucket) {
 		if (sctp_ifnp->ifn_index == ifn_index) {
-			return (sctp_ifnp);
+			break;
 		}
-		if (sctp_ifnp->ifn_p && ifn && (sctp_ifnp->ifn_p == ifn)) {
-			return (sctp_ifnp);
+		if (ifn != NULL && sctp_ifnp->ifn_p == ifn) {
+			break;
 		}
 	}
-	return (NULL);
+	return (sctp_ifnp);
 }
 
 struct sctp_vrf *
@@ -249,17 +245,6 @@ sctp_free_ifn(struct sctp_ifn *sctp_ifnp)
 		}
 		SCTP_FREE(sctp_ifnp, SCTP_M_IFN);
 		atomic_subtract_int(&SCTP_BASE_INFO(ipi_count_ifns), 1);
-	}
-}
-
-void
-sctp_update_ifn_mtu(uint32_t ifn_index, uint32_t mtu)
-{
-	struct sctp_ifn *sctp_ifnp;
-
-	sctp_ifnp = sctp_find_ifn((void *)NULL, ifn_index);
-	if (sctp_ifnp != NULL) {
-		sctp_ifnp->ifn_mtu = mtu;
 	}
 }
 
@@ -769,7 +754,7 @@ sctp_del_addr_from_vrf(uint32_t vrf_id, struct sockaddr *addr,
 	else {
 		SCTPDBG(SCTP_DEBUG_PCB4, "Del Addr-ifn:%d Could not find address:",
 		    ifn_index);
-		SCTPDBG_ADDR(SCTP_DEBUG_PCB1, addr);
+		SCTPDBG_ADDR(SCTP_DEBUG_PCB4, addr);
 	}
 #endif
 
