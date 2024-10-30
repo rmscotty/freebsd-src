@@ -860,3 +860,48 @@ TEST_F(Setattr_7_8, chmod)
 	})));
 	EXPECT_EQ(0, chmod(FULLPATH, newmode)) << strerror(errno);
 }
+
+
+/* set the flags of the file */
+TEST_F(Setattr, chflags_set)
+{
+	const char FULLPATH[] = "mountpoint/some_file.txt";
+	const char RELPATH[] = "some_file.txt";
+	const uint64_t ino = 42;
+	const uint32_t newflags = UF_IMMUTABLE | UF_NOUNLINK | UF_APPEND;
+	const uint32_t oldflags = 0;
+	
+	EXPECT_LOOKUP(FUSE_ROOT_ID, RELPATH)
+		.WillOnce(Invoke(ReturnImmediate([=](auto in __unused, auto& out) {
+			SET_OUT_HEADER_LEN(out, entry);
+			out.body.entry.nodeid = ino;
+			out.body.entry.attr.mode = S_IFREG | 0755;
+			out.body.entry.attr.flags = oldflags;
+			out.body.entry.attr_valid = UINT64_MAX;
+			out.body.entry.entry_valid = UINT64_MAX;
+		})));
+
+
+	EXPECT_CALL(*m_mock, process(
+			    ResultOf([](auto in) {
+				    uint32_t valid = FATTR_FLAGS;
+				    return (in.header.opcode == FUSE_SETATTR &&
+					    in.header.nodeid == ino &&
+					    in.body.setattr.valid == valid &&
+					    in.body.setattr.flags == newflags);
+			    }, Eq(true)),
+			    _)
+		).WillOnce(Invoke(ReturnImmediate([](auto in __unused, auto& out) {
+			SET_OUT_HEADER_LEN(out, attr);
+			out.body.attr.attr.ino = ino;	// Must match nodeid
+			out.body.attr.attr.flags = newflags;
+			out.body.attr.attr.mode = S_IFREG | 0755;
+			out.body.attr.attr_valid = UINT64_MAX;
+		})));
+
+	EXPECT_EQ(0, chflags(FULLPATH, newflags)) << strerror(errno);
+
+	struct stat sb;
+	EXPECT_EQ(0, stat(FULLPATH, &sb)) << strerror(errno);
+	ASSERT_EQ(sb.st_flags, newflags);
+}
