@@ -68,7 +68,7 @@ virtual void SetUp() {
 
 public:
 void expect_getattr(uint64_t ino, mode_t mode, uint64_t attr_valid, int times,
-	uid_t uid = 0, gid_t gid = 0)
+		    uid_t uid = 0, gid_t gid = 0, uint32_t flags = 0)
 {
 	EXPECT_CALL(*m_mock, process(
 		ResultOf([=](auto in) {
@@ -85,13 +85,14 @@ void expect_getattr(uint64_t ino, mode_t mode, uint64_t attr_valid, int times,
 		out.body.attr.attr.uid = uid;
 		out.body.attr.attr.gid = gid;
 		out.body.attr.attr_valid = attr_valid;
+		out.body.attr.attr.flags = flags;
 	})));
 }
 
 void expect_lookup(const char *relpath, uint64_t ino, mode_t mode,
-	uint64_t attr_valid, uid_t uid = 0, gid_t gid = 0)
+		   uint64_t attr_valid, uid_t uid = 0, gid_t gid = 0, uint32_t flags = 0)
 {
-	FuseTest::expect_lookup(relpath, ino, mode, 0, 1, attr_valid, uid, gid);
+	FuseTest::expect_lookup(relpath, ino, mode, 0, 1, attr_valid, uid, gid, flags);
 }
 
 };
@@ -122,3 +123,35 @@ TEST_F(Setattr, sticky_regular_file)
 }
 
 
+TEST_F(Setattr, chflags_unset)
+{
+	const char FULLPATH[] = "mountpoint/some_file.txt";
+	const char RELPATH[] = "some_file.txt";
+	const uint64_t ino = 42;
+	const uint32_t oldflags = SF_NOUNLINK | SF_IMMUTABLE | SF_APPEND;
+	const uint32_t newflags = 0;
+
+	expect_getattr(1, S_IFDIR | 0755, UINT64_MAX, 1, geteuid(), getegid(), oldflags);
+	expect_lookup(RELPATH, ino, S_IFREG | 0755, UINT64_MAX, geteuid(), getegid(), oldflags);
+
+	EXPECT_CALL(*m_mock, process(
+			    ResultOf([](auto in) {
+				    uint32_t valid = FATTR_FLAGS;
+				    return (in.header.opcode == FUSE_SETATTR &&
+					    in.header.nodeid == ino &&
+					    in.body.setattr.valid == valid &&
+					    in.body.setattr.flags == newflags);
+			    }, Eq(true)),
+			    _)
+		).WillOnce(Invoke(ReturnImmediate([](auto in __unused, auto& out) {
+			SET_OUT_HEADER_LEN(out, attr);
+			out.body.attr.attr.ino = ino;	// Must match nodeid
+			out.body.attr.attr.flags = newflags;
+			out.body.attr.attr.mode = S_IFREG | 0755;
+			out.body.attr.attr_valid = UINT64_MAX;
+			out.body.attr.attr.uid = geteuid();
+			out.body.attr.attr.gid = getegid();			
+		})));
+
+	EXPECT_EQ(0, chflags(FULLPATH, newflags)) << strerror(errno);
+}

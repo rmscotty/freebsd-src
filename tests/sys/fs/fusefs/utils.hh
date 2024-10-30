@@ -157,7 +157,7 @@ class FuseTest : public ::testing::Test {
 	 */
 	void expect_lookup(const char *relpath, uint64_t ino, mode_t mode,
 		uint64_t size, int times, uint64_t attr_valid = UINT64_MAX,
-		uid_t uid = 0, gid_t gid = 0);
+			   uid_t uid = 0, gid_t gid = 0, uint32_t flags = 0);
 
 	/* The protocol 7.8 version of expect_lookup */
 	void expect_lookup_7_8(const char *relpath, uint64_t ino, mode_t mode,

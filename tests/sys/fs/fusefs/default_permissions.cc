@@ -127,7 +127,7 @@ void expect_copy_file_range(uint64_t ino_in, uint64_t off_in, uint64_t ino_out,
 }
 
 void expect_getattr(uint64_t ino, mode_t mode, uint64_t attr_valid, int times,
-	uid_t uid = 0, gid_t gid = 0)
+		    uid_t uid = 0, gid_t gid = 0, uint32_t flags = 0)
 {
 	EXPECT_CALL(*m_mock, process(
 		ResultOf([=](auto in) {
@@ -144,13 +144,14 @@ void expect_getattr(uint64_t ino, mode_t mode, uint64_t attr_valid, int times,
 		out.body.attr.attr.uid = uid;
 		out.body.attr.attr.gid = gid;
 		out.body.attr.attr_valid = attr_valid;
+		out.body.attr.attr.flags = flags;
 	})));
 }
 
 void expect_lookup(const char *relpath, uint64_t ino, mode_t mode,
-	uint64_t attr_valid, uid_t uid = 0, gid_t gid = 0)
+		   uint64_t attr_valid, uid_t uid = 0, gid_t gid = 0, uint32_t flags = 0)
 {
-	FuseTest::expect_lookup(relpath, ino, mode, 0, 1, attr_valid, uid, gid);
+	FuseTest::expect_lookup(relpath, ino, mode, 0, 1, attr_valid, uid, gid, flags);
 }
 
 };
@@ -960,6 +961,20 @@ TEST_F(Open, eacces)
 	EXPECT_EQ(EACCES, errno);
 }
 
+TEST_F(Open, eperm_flags_append)
+{
+	const char FULLPATH[] = "mountpoint/some_file.txt";
+	const char RELPATH[] = "some_file.txt";
+	const uint32_t flags = UF_APPEND;
+	uint64_t ino = 42;
+
+	expect_getattr(FUSE_ROOT_ID, S_IFDIR | 0755, UINT64_MAX, 1);
+	expect_lookup(RELPATH, ino, S_IFREG | 0644, UINT64_MAX, geteuid(), getegid(), flags);
+
+	EXPECT_EQ(-1, open(FULLPATH, O_RDWR));
+	EXPECT_EQ(EPERM, errno);
+}
+
 TEST_F(Open, ok)
 {
 	const char FULLPATH[] = "mountpoint/some_file.txt";
@@ -1204,6 +1219,50 @@ TEST_F(Rename, eperm_on_sticky_dstdir)
 	ASSERT_EQ(EPERM, errno);
 }
 
+/*a user cannot move or rename a file which has UF_NOUNLINK flag set*/
+TEST_F(Rename, eperm_on_src_nounlink)
+{
+	const char FULLDST[] = "mountpoint/dst";
+	const char RELDST[] = "dst";
+	const char FULLSRC[] = "mountpoint/src";
+	const char RELSRC[] = "src";
+	// The inode of the already-existing destination file
+	uint64_t dst_ino = 2;
+	uint64_t ino = 42;
+
+	// flags
+	const uint32_t flags = UF_NOUNLINK;
+
+	expect_getattr(FUSE_ROOT_ID, S_IFDIR | 0777, UINT64_MAX, 1, geteuid());
+	expect_lookup(RELSRC, ino, S_IFREG | 0644, UINT64_MAX, geteuid(), getegid(), flags);
+	expect_lookup(RELDST, dst_ino, S_IFREG | 0644, UINT64_MAX);
+
+	EXPECT_EQ(-1, rename(FULLSRC, FULLDST)) << strerror(errno);
+	EXPECT_EQ(EPERM, errno) << strerror(errno);
+}
+
+/*a user cannot move or rename a file which has UF_NOUNLINK flag set*/
+TEST_F(Rename, eperm_on_dst_nounlink)
+{
+	const char FULLDST[] = "mountpoint/dst";
+	const char RELDST[] = "dst";
+	const char FULLSRC[] = "mountpoint/src";
+	const char RELSRC[] = "src";
+	// The inode of the already-existing destination file
+	uint64_t dst_ino = 2;
+	uint64_t ino = 42;
+
+	// flags
+	const uint32_t flags = UF_NOUNLINK;
+
+	expect_getattr(FUSE_ROOT_ID, S_IFDIR | 0777, UINT64_MAX, 1, geteuid());
+	expect_lookup(RELSRC, ino, S_IFREG | 0644, UINT64_MAX, geteuid());
+	expect_lookup(RELDST, dst_ino, S_IFREG | 0644, UINT64_MAX, geteuid(), getegid(), flags);
+
+	EXPECT_EQ(-1, rename(FULLSRC, FULLDST)) << strerror(errno);
+	EXPECT_EQ(EPERM, errno) << strerror(errno);
+}
+
 /* Successfully rename a file, overwriting the destination */
 TEST_F(Rename, ok)
 {
@@ -1301,6 +1360,57 @@ TEST_F(Setattr, ok)
 	})));
 
 	EXPECT_EQ(0, chmod(FULLPATH, newmode)) << strerror(errno);
+}
+
+/* Change the flags of a file */
+TEST_F(Setattr, chflags)
+{
+	
+	const char FULLPATH[] = "mountpoint/file.txt";
+	const char RELPATH[] = "file.txt";
+	const uint64_t ino = 42;
+	const uint32_t flags = UF_APPEND | UF_IMMUTABLE | UF_NOUNLINK;
+
+	expect_getattr(FUSE_ROOT_ID, S_IFDIR | 0755, UINT64_MAX, 1);
+	expect_lookup(RELPATH, ino, S_IFREG | 0755, UINT64_MAX, geteuid());
+	
+	EXPECT_CALL(*m_mock, process(
+		ResultOf([](auto in) {
+			uint32_t valid = FATTR_FLAGS;
+			return (in.header.opcode == FUSE_SETATTR &&
+				in.header.nodeid == ino &&				
+				in.body.setattr.valid == valid &&
+				in.body.setattr.flags == flags);
+		}, Eq(true)),
+		_)
+	).WillOnce(Invoke(ReturnImmediate([](auto in __unused, auto& out) {
+		SET_OUT_HEADER_LEN(out, attr);
+		out.body.entry.nodeid = ino;
+		out.body.attr.attr.mode = S_IFREG | 0755;
+		out.body.attr.attr.flags = flags;
+	})));
+
+	EXPECT_EQ(0, chflags(FULLPATH, flags)) << strerror(errno);
+}
+
+/*
+  If one of SF_IMMUTABLE, SF_APPEND, or SF_NOUNLINK is set a  non-super-
+  user  cannot  change any flags and even the super-user can change flags
+  only if securelevel is 0.
+ */
+TEST_F(Setattr, chflags_sflag)
+{
+	const char FULLPATH[] = "mountpoint/some_file.txt";
+	const char RELPATH[] = "some_file.txt";
+	const uint64_t ino = 42;
+	const uint32_t flags = SF_NOUNLINK | SF_APPEND | SF_IMMUTABLE;
+
+	expect_getattr(FUSE_ROOT_ID, S_IFDIR | 0755, UINT64_MAX, 1);
+	expect_lookup(RELPATH, ino, S_IFREG | 0755, UINT64_MAX, geteuid(), 0, flags);
+
+
+	EXPECT_EQ(-1, chflags(FULLPATH, 0));
+	EXPECT_EQ(EPERM, errno) << strerror(errno);
 }
 
 TEST_F(Setattr, eacces)
@@ -1502,6 +1612,20 @@ TEST_F(Unlink, ok)
 
 	sem_wait(&sem);
 	sem_destroy(&sem);
+}
+
+TEST_F(Unlink, eperm_flags_nounlink)
+{
+	const char FULLPATH[] = "mountpoint/some_file.txt";
+	const char RELPATH[] = "some_file.txt";
+	const uint32_t flags = UF_NOUNLINK;
+	uint64_t ino = 42;
+
+	expect_getattr(FUSE_ROOT_ID, S_IFDIR | 0777, UINT64_MAX, 1);
+	expect_lookup(RELPATH, ino, S_IFREG | 0644, UINT64_MAX, geteuid(), getegid(), flags);
+
+	ASSERT_EQ(-1, unlink(FULLPATH));
+	EXPECT_EQ(EPERM, errno) << strerror(errno);
 }
 
 /*

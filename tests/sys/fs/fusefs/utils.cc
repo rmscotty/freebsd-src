@@ -283,6 +283,7 @@ void FuseTest::expect_getattr(uint64_t ino, uint64_t size)
 		out.body.attr.attr.mode = S_IFREG | 0644;
 		out.body.attr.attr.size = size;
 		out.body.attr.attr_valid = UINT64_MAX;
+		out.body.attr.attr.flags = 0;
 	})));
 }
 
@@ -301,7 +302,8 @@ void FuseTest::expect_getxattr(uint64_t ino, const char *attr, ProcessMockerT r)
 }
 
 void FuseTest::expect_lookup(const char *relpath, uint64_t ino, mode_t mode,
-	uint64_t size, int times, uint64_t attr_valid, uid_t uid, gid_t gid)
+			     uint64_t size, int times, uint64_t attr_valid,
+			     uid_t uid, gid_t gid, uint32_t flags)
 {
 	EXPECT_LOOKUP(FUSE_ROOT_ID, relpath)
 	.Times(times)
@@ -315,6 +317,7 @@ void FuseTest::expect_lookup(const char *relpath, uint64_t ino, mode_t mode,
 		out.body.entry.attr.size = size;
 		out.body.entry.attr.uid = uid;
 		out.body.entry.attr.gid = gid;
+		out.body.entry.attr.flags = flags;
 	})));
 }
 

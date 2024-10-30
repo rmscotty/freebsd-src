@@ -1772,11 +1772,13 @@ fuse_vnop_open(struct vop_open_args *ap)
 	/* if default_permissions and file is append only, deny write requests */
 	if (checkperm) {
 		int error = fuse_internal_getattr(vp, &attr, cred, td);
-		if (error)
+		if (error) {
 			return (error);
-		if (attr.va_flags & APPEND &&
-		    (a_mode & (FWRITE | O_APPEND)) == FWRITE)
+		}
+		if ((attr.va_flags & APPEND) &&
+		    (a_mode & (FWRITE | O_APPEND)) == FWRITE) {
 			return (EPERM);
+		}
 	}	
 
 	if ((a_mode & (FREAD | FWRITE | FEXEC)) == 0)
@@ -2251,7 +2253,7 @@ fuse_vnop_rename(struct vop_rename_args *ap)
 			goto out;
 		
 		if ((fvattr.va_flags & (NOUNLINK | IMMUTABLE | APPEND)) ||
-		    (tdvattr.va_flags & (APPEND | IMMUTABLE))) {
+		    (fdvattr.va_flags & (APPEND | IMMUTABLE))) {
 			err = EPERM;
 			goto out;
 		}
@@ -2374,6 +2376,7 @@ fuse_vnop_setattr(struct vop_setattr_args *ap)
 	accmode_t accmode = 0;
 	bool checkperm;
 	bool drop_suid = false;
+	bool refresh_flags = true;
 
 	mp = vnode_mount(vp);
 	data = fuse_get_mpdata(mp);
@@ -2383,9 +2386,13 @@ fuse_vnop_setattr(struct vop_setattr_args *ap)
 	if (fuse_isdeadfs(vp)) {
 		return ENXIO;
 	}
+
+	if (vfs_isrdonly(mp)) {
+		return EROFS;
+	}
 	
 	if (vap->va_flags != VNOVAL) {
-
+		accmode |= VADMIN;
 		if (checkperm) {
 			if ((vap->va_flags & ~(SF_APPEND | SF_ARCHIVED | SF_IMMUTABLE |
 					       SF_NOUNLINK | SF_SNAPSHOT | UF_APPEND | UF_ARCHIVE |
@@ -2394,11 +2401,8 @@ fuse_vnop_setattr(struct vop_setattr_args *ap)
 					       UF_SPARSE | UF_SYSTEM)) != 0)
 				return (EOPNOTSUPP);
 
-			if (vfs_isrdonly(mp))
-				return EROFS;
-
 			/* check for vadmin rights and get the attrs */
-			err = fuse_internal_access(vp, VADMIN, td, cred);
+			err = fuse_internal_access(vp, accmode, td, cred);
 			if (err)
 				return (err);
 			err2 = fuse_internal_getattr(vp, &old_va, cred, td);
@@ -2425,19 +2429,14 @@ fuse_vnop_setattr(struct vop_setattr_args *ap)
 				    ((vap->va_flags ^ old_va.va_flags) & SF_SETTABLE))
 					return (EPERM);
 			}
+			/* no other attr must be changed */
+			if (vap->va_flags & (IMMUTABLE | APPEND))
+				return fuse_internal_setattr(vp, vap, td, cred);
+			refresh_flags = false;
 		} /* else let the FS do the checks */
-
-		/* set the flags */
-		
-		/* struct vattr flags; */
-		/* VATTR_NULL(&flags); */
-		/* flags.va_flags = vap->va_flags; */
-		/* err = fuse_internal_setattr(vp, &flags, td, cred); */
-		/* if (err) */
-		/* 	return (err); */
 	}
 
-	if (checkperm) {
+	if (checkperm && refresh_flags) {
 		err = fuse_internal_getattr(vp, &old_va, cred, td);
 		if (err)
 			return (err);
@@ -2448,9 +2447,9 @@ fuse_vnop_setattr(struct vop_setattr_args *ap)
 		 * except the ones already handled (in some cases, file flags
 		 * including the immutability flags themselves for the superuser).
 		 */
-		if (old_va.va_flags & (IMMUTABLE | APPEND)) {
+		if (old_va.va_flags & (IMMUTABLE | APPEND))
 			return (EPERM);
-		}
+
 	}
 	
 	if (vap->va_uid != (uid_t)VNOVAL) {
@@ -2550,9 +2549,6 @@ fuse_vnop_setattr(struct vop_setattr_args *ap)
 		accmode |= VADMIN;
 	}
 
-	if (vfs_isrdonly(mp))
-		return EROFS;
-
 	if (checkperm) {
 		err = fuse_internal_access(vp, accmode, td, cred);
 	} else {
@@ -2560,8 +2556,9 @@ fuse_vnop_setattr(struct vop_setattr_args *ap)
 	}
 	if (err)
 		return err;
-	else
+	else {
 		return fuse_internal_setattr(vp, vap, td, cred);
+	}
 }
 
 /*

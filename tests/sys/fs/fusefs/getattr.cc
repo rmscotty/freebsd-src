@@ -227,6 +227,7 @@ TEST_F(Getattr, ok)
 		out.body.attr.attr.gid = 11;
 		out.body.attr.attr.rdev = 12;
 		out.body.attr.attr.blksize = 12345;
+		out.body.attr.attr.flags = SF_IMMUTABLE;
 	})));
 
 	ASSERT_EQ(0, stat(FULLPATH, &sb)) << strerror(errno);
@@ -245,6 +246,7 @@ TEST_F(Getattr, ok)
 	EXPECT_EQ((blksize_t)12345, sb.st_blksize);
 	EXPECT_EQ(ino, sb.st_ino);
 	EXPECT_EQ(S_IFREG | 0644, sb.st_mode);
+	EXPECT_EQ((uint32_t)SF_IMMUTABLE, sb.st_flags);
 
 	/*
 	 * st_birthtim and st_flags are not supported by the fuse protocol.
@@ -254,7 +256,6 @@ TEST_F(Getattr, ok)
 	 */
 	EXPECT_EQ(-1, sb.st_birthtim.tv_sec);
 	EXPECT_EQ(0, sb.st_birthtim.tv_nsec);
-	EXPECT_EQ(0u, sb.st_flags);
 }
 
 /*

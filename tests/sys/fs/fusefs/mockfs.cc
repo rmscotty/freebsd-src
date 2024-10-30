@@ -340,6 +340,8 @@ void MockFS::debug_request(const mockfs_buf_in &in, ssize_t buflen)
 					in.body.setattr.mtimensec);
 			if (in.body.setattr.valid & FATTR_FH)
 				printf(" fh=%" PRIu64 "", in.body.setattr.fh);
+			if (in.body.setattr.valid & FATTR_FLAGS)
+				printf(" flags=%" PRIu32 "", in.body.setattr.flags);
 			break;
 		case FUSE_SETLK:
 			printf(" fh=%#" PRIx64 " owner=%" PRIu64

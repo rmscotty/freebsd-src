@@ -1207,7 +1207,7 @@ int fuse_internal_setattr(struct vnode *vp, struct vattr *vap,
 		fsai->valid |= FATTR_MODE;
 	}
 	if (vap->va_flags != VNOVAL) {
-		fsai->flags |= vap->va_flags;
+		fsai->flags = vap->va_flags;
 		fsai->valid |= FATTR_FLAGS;
 	}
 	if (!fsai->valid) {
