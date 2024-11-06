@@ -161,7 +161,11 @@
  *  - add FOPEN_CACHE_DIR
  *  - add FUSE_MAX_PAGES, add max_pages to init_out
  *  - add FUSE_CACHE_SYMLINKS
+ *
+ *  7.29
+ *  - add FUSE_NO_OPENDIR_SUPPORT flag
  */
+
 
 #ifndef _FUSE_FUSE_KERNEL_H
 #define _FUSE_FUSE_KERNEL_H
@@ -862,6 +866,8 @@ struct fuse_notify_retrieve_in {
 	uint64_t	dummy3;
 	uint64_t	dummy4;
 };
+/* Device ioctls: */
+#define FUSE_DEV_IOC_CLONE	_IOR(229, 0, uint32_t)
 
 struct fuse_lseek_in {
 	uint64_t	fh;
