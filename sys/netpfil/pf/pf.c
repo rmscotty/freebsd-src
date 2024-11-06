@@ -576,8 +576,10 @@ static bool
 pf_is_loopback(sa_family_t af, struct pf_addr *addr)
 {
 	switch (af) {
+#ifdef INET
 	case AF_INET:
 		return IN_LOOPBACK(ntohl(addr->v4.s_addr));
+#endif
 	case AF_INET6:
 		return IN6_IS_ADDR_LOOPBACK(&addr->v6);
 	default:
@@ -1797,6 +1799,9 @@ pf_find_state_all(const struct pf_state_key_cmp *key, u_int dir, int *more)
 	struct pf_state_key	*sk;
 	struct pf_kstate	*s, *ret = NULL;
 	int			 idx, inout = 0;
+
+	if (more != NULL)
+		*more = 0;
 
 	pf_counter_u64_add(&V_pf_status.fcounters[FCNT_STATE_SEARCH], 1);
 
