@@ -161,6 +161,12 @@
  *  - add FOPEN_CACHE_DIR
  *  - add FUSE_MAX_PAGES, add max_pages to init_out
  *  - add FUSE_CACHE_SYMLINKS
+ *
+ *  7.29
+ *  - add FUSE_NO_OPENDIR_SUPPORT flag
+ *
+ *  7.30
+ *  - add FUSE_EXPLICIT_INVAL_DATA
  */
 
 #ifndef _FUSE_FUSE_KERNEL_H
@@ -196,7 +202,7 @@
 #define FUSE_KERNEL_VERSION 7
 
 /** Minor version number of this interface */
-#define FUSE_KERNEL_MINOR_VERSION 29
+#define FUSE_KERNEL_MINOR_VERSION 30
 
 /** The node ID of the root inode */
 #define FUSE_ROOT_ID 1
@@ -299,6 +305,7 @@ struct fuse_file_lock {
  * FUSE_MAX_PAGES: init_out.max_pages contains the max number of req pages
  * FUSE_CACHE_SYMLINKS: cache READLINK responses
  * FUSE_NO_OPENDIR_SUPPORT: kernel supports zero-message opendir
+ * FUSE_EXPLICIT_INVAL_DATA: only invalidate cached pages on explicit request
  */
 #define FUSE_ASYNC_READ		(1 << 0)
 #define FUSE_POSIX_LOCKS	(1 << 1)
@@ -325,6 +332,7 @@ struct fuse_file_lock {
 #define FUSE_MAX_PAGES		(1 << 22)
 #define FUSE_CACHE_SYMLINKS	(1 << 23)
 #define FUSE_NO_OPENDIR_SUPPORT (1 << 24)
+#define FUSE_EXPLICIT_INVAL_DATA (1 << 25)
 
 #ifdef linux
 /**
@@ -862,6 +870,9 @@ struct fuse_notify_retrieve_in {
 	uint64_t	dummy3;
 	uint64_t	dummy4;
 };
+
+/* Device ioctls: */
+#define FUSE_DEV_IOC_CLONE	_IOR(229, 0, uint32_t)
 
 struct fuse_lseek_in {
 	uint64_t	fh;
