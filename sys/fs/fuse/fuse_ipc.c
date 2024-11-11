@@ -847,6 +847,9 @@ fuse_setup_ihead(struct fuse_in_header *ihead, struct fuse_ticket *ftick,
 	ihead->pid = pid;
 	ihead->uid = cred->cr_uid;
 	ihead->gid = cred->cr_gid;
+
+	/* request extension aren't supported yet */
+	ihead->total_extlen = 0;
 }
 
 /*
