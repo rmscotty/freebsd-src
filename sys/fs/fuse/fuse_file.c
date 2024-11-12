@@ -127,7 +127,7 @@ fuse_filehandle_open(struct vnode *vp, int a_mode,
 	const struct fuse_open_out default_foo = {
 		.fh = 0,
 		.open_flags = FOPEN_KEEP_CACHE,
-		.padding = 0
+		// .padding = 0
 	};
 	struct fuse_open_in *foi = NULL;
 	const struct fuse_open_out *foo;
