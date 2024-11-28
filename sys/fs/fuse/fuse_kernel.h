@@ -700,7 +700,7 @@ struct fuse_fsync_in {
 	uint32_t	padding;
 };
 
-#define FUSE_SETXATTR_EXT	(1 << 29)
+#define FUSE_COMPAT_SETXATTR_IN_SIZE 8
 
 struct fuse_setxattr_in {
 	uint32_t	size;
