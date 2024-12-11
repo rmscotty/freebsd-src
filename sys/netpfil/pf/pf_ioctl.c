@@ -233,7 +233,6 @@ static int		 pf_clearstates_nv(struct pfioc_nv *);
 static int		 pf_getstate(struct pfioc_nv *);
 static int		 pf_getstatus(struct pfioc_nv *);
 static int		 pf_clear_tables(void);
-static void		 pf_clear_srcnodes(void);
 static void		 pf_kill_srcnodes(struct pfioc_src_node_kill *);
 static int		 pf_keepcounters(struct pfioc_nv *);
 static void		 pf_tbladdr_copyout(struct pf_addr_wrap *);
@@ -1571,6 +1570,7 @@ pf_src_node_copy(const struct pf_ksrc_node *in, struct pf_src_node *out)
 		out->expire = 0;
 
 	/* Adjust the connection rate estimate. */
+	out->conn_rate = in->conn_rate;
 	diff = secs - in->conn_rate.last;
 	if (diff >= in->conn_rate.seconds)
 		out->conn_rate.count = 0;
@@ -2341,7 +2341,7 @@ relock_DIOCKILLSTATES:
 		if (!  PF_MATCHA(psk->psk_rt_addr.neg,
 		    &psk->psk_rt_addr.addr.v.a.addr,
 		    &psk->psk_rt_addr.addr.v.a.mask,
-		    &s->rt_addr, sk->af))
+		    &s->act.rt_addr, sk->af))
 			continue;
 
 		if (psk->psk_src.port_op != 0 &&
@@ -5451,8 +5451,7 @@ DIOCCHANGEADDR_error:
 	}
 
 	case DIOCCLRSRCNODES: {
-		pf_clear_srcnodes();
-		pf_purge_expired_src_nodes();
+		pf_kill_srcnodes(NULL);
 		break;
 	}
 
@@ -5588,7 +5587,7 @@ pfsync_state_export(union pfsync_state_union *sp, struct pf_kstate *st, int msg_
 
 	/* copy from state */
 	strlcpy(sp->pfs_1301.ifname, st->kif->pfik_name, sizeof(sp->pfs_1301.ifname));
-	bcopy(&st->rt_addr, &sp->pfs_1301.rt_addr, sizeof(sp->pfs_1301.rt_addr));
+	bcopy(&st->act.rt_addr, &sp->pfs_1301.rt_addr, sizeof(sp->pfs_1301.rt_addr));
 	sp->pfs_1301.creation = htonl(time_uptime - (st->creation / 1000));
 	sp->pfs_1301.expire = pf_state_expires(st);
 	if (sp->pfs_1301.expire <= time_uptime)
@@ -5616,10 +5615,10 @@ pfsync_state_export(union pfsync_state_union *sp, struct pf_kstate *st, int msg_
 			sp->pfs_1400.max_mss = htons(st->act.max_mss);
 			sp->pfs_1400.set_prio[0] = st->act.set_prio[0];
 			sp->pfs_1400.set_prio[1] = st->act.set_prio[1];
-			sp->pfs_1400.rt = st->rt;
-			if (st->rt_kif)
+			sp->pfs_1400.rt = st->act.rt;
+			if (st->act.rt_kif)
 				strlcpy(sp->pfs_1400.rt_ifname,
-				    st->rt_kif->pfik_name,
+				    st->act.rt_kif->pfik_name,
 				    sizeof(sp->pfs_1400.rt_ifname));
 			break;
 		default:
@@ -5679,7 +5678,7 @@ pf_state_export(struct pf_state_export *sp, struct pf_kstate *st)
 	strlcpy(sp->ifname, st->kif->pfik_name, sizeof(sp->ifname));
 	strlcpy(sp->orig_ifname, st->orig_kif->pfik_name,
 	    sizeof(sp->orig_ifname));
-	bcopy(&st->rt_addr, &sp->rt_addr, sizeof(sp->rt_addr));
+	bcopy(&st->act.rt_addr, &sp->rt_addr, sizeof(sp->rt_addr));
 	sp->creation = htonl(time_uptime - (st->creation / 1000));
 	sp->expire = pf_state_expires(st);
 	if (sp->expire <= time_uptime)
@@ -5729,9 +5728,9 @@ pf_state_export(struct pf_state_export *sp, struct pf_kstate *st)
 	sp->min_ttl = st->act.min_ttl;
 	sp->set_tos = st->act.set_tos;
 	sp->max_mss = htons(st->act.max_mss);
-	sp->rt = st->rt;
-	if (st->rt_kif)
-		strlcpy(sp->rt_ifname, st->rt_kif->pfik_name,
+	sp->rt = st->act.rt;
+	if (st->act.rt_kif)
+		strlcpy(sp->rt_ifname, st->act.rt_kif->pfik_name,
 		    sizeof(sp->rt_ifname));
 	sp->set_prio[0] = st->act.set_prio[0];
 	sp->set_prio[1] = st->act.set_prio[1];
@@ -5928,39 +5927,10 @@ pf_clear_tables(void)
 }
 
 static void
-pf_clear_srcnodes(void)
-{
-	struct pf_kstate	*s;
-	struct pf_srchash	*sh;
-	struct pf_ksrc_node	*sn;
-	int			 i;
-
-	for (i = 0; i <= V_pf_hashmask; i++) {
-		struct pf_idhash *ih = &V_pf_idhash[i];
-
-		PF_HASHROW_LOCK(ih);
-		LIST_FOREACH(s, &ih->states, entry) {
-			s->src_node = NULL;
-			s->nat_src_node = NULL;
-		}
-		PF_HASHROW_UNLOCK(ih);
-	}
-
-	for (i = 0, sh = V_pf_srchash; i <= V_pf_srchashmask;
-	    i++, sh++) {
-		PF_HASHROW_LOCK(sh);
-		LIST_FOREACH(sn, &sh->nodes, entry) {
-			sn->expire = 1;
-			sn->states = 0;
-		}
-		PF_HASHROW_UNLOCK(sh);
-	}
-}
-
-static void
 pf_kill_srcnodes(struct pfioc_src_node_kill *psnk)
 {
 	struct pf_ksrc_node_list	 kill;
+	u_int 				 killed;
 
 	LIST_INIT(&kill);
 	for (int i = 0; i <= V_pf_srchashmask; i++) {
@@ -5969,14 +5939,15 @@ pf_kill_srcnodes(struct pfioc_src_node_kill *psnk)
 
 		PF_HASHROW_LOCK(sh);
 		LIST_FOREACH_SAFE(sn, &sh->nodes, entry, tmp)
-			if (PF_MATCHA(psnk->psnk_src.neg,
+			if (psnk == NULL ||
+			    (PF_MATCHA(psnk->psnk_src.neg,
 			      &psnk->psnk_src.addr.v.a.addr,
 			      &psnk->psnk_src.addr.v.a.mask,
 			      &sn->addr, sn->af) &&
 			    PF_MATCHA(psnk->psnk_dst.neg,
 			      &psnk->psnk_dst.addr.v.a.addr,
 			      &psnk->psnk_dst.addr.v.a.mask,
-			      &sn->raddr, sn->af)) {
+			      &sn->raddr, sn->af))) {
 				pf_unlink_src_node(sn);
 				LIST_INSERT_HEAD(&kill, sn, entry);
 				sn->expire = 1;
@@ -5998,7 +5969,10 @@ pf_kill_srcnodes(struct pfioc_src_node_kill *psnk)
 		PF_HASHROW_UNLOCK(ih);
 	}
 
-	psnk->psnk_killed = pf_free_src_nodes(&kill);
+	killed = pf_free_src_nodes(&kill);
+
+	if (psnk != NULL)
+		psnk->psnk_killed = killed;
 }
 
 static int
@@ -6422,7 +6396,7 @@ shutdown_pf(void)
 
 		pf_clear_all_states();
 
-		pf_clear_srcnodes();
+		pf_kill_srcnodes(NULL);
 
 		/* status does not use malloced mem so no need to cleanup */
 		/* fingerprints and interfaces have their own cleanup code */

@@ -176,7 +176,6 @@ ivrs_lookup_ivhd_0x40(ACPI_IVRS_HARDWARE2 *h2, void *arg)
 		return (false);
 
 	ildp->sc->unit_dom = h2->PciSegmentGroup;
-	ildp->sc->iommu.unit = ivrs_info_to_unit_id(h2->Info);
 	ildp->sc->efr = h2->EfrRegisterImage;
 	return (true);
 }
@@ -194,7 +193,6 @@ ivrs_lookup_ivhd_0x10(ACPI_IVRS_HARDWARE1 *h1, void *arg)
 		return (false);
 
 	ildp->sc->unit_dom = h1->PciSegmentGroup;
-	ildp->sc->iommu.unit = ivrs_info_to_unit_id(h1->Info);
 	return (true);
 }
 
@@ -224,9 +222,23 @@ amdiommu_create_dev_tbl(struct amdiommu_unit *sc)
 	u_int devtbl_sz, dom, i, reclaimno, segnum_log, segnum, seg_sz;
 	int error;
 
+	static const int devtab_base_regs[] = {
+		AMDIOMMU_DEVTAB_BASE,
+		AMDIOMMU_DEVTAB_S1_BASE,
+		AMDIOMMU_DEVTAB_S2_BASE,
+		AMDIOMMU_DEVTAB_S3_BASE,
+		AMDIOMMU_DEVTAB_S4_BASE,
+		AMDIOMMU_DEVTAB_S5_BASE,
+		AMDIOMMU_DEVTAB_S6_BASE,
+		AMDIOMMU_DEVTAB_S7_BASE
+	};
+
 	segnum_log = (sc->efr & AMDIOMMU_EFR_DEVTBLSEG_MASK) >>
 	    AMDIOMMU_EFR_DEVTBLSEG_SHIFT;
 	segnum = 1 << segnum_log;
+
+	KASSERT(segnum <= nitems(devtab_base_regs),
+	    ("%s: unsupported devtab segment count %u", __func__, segnum));
 
 	devtbl_sz = amdiommu_devtbl_sz(sc);
 	seg_sz = devtbl_sz / segnum;
@@ -248,7 +260,6 @@ amdiommu_create_dev_tbl(struct amdiommu_unit *sc)
 	for (i = 0; i < segnum; i++) {
 		vm_page_t m;
 		uint64_t rval;
-		u_int reg;
 
 		for (reclaimno = 0; reclaimno < 3; reclaimno++) {
 			VM_OBJECT_WLOCK(sc->devtbl_obj);
@@ -276,9 +287,7 @@ amdiommu_create_dev_tbl(struct amdiommu_unit *sc)
 			pmap_zero_page(m);
 			pmap_qenter(seg_vaddr, &m, 1);
 		}
-		reg = i == 0 ? AMDIOMMU_DEVTAB_BASE : AMDIOMMU_DEVTAB_S1_BASE +
-		    i - 1;
-		amdiommu_write8(sc, reg, rval);		
+		amdiommu_write8(sc, devtab_base_regs[i], rval);
 	}
 
 	return (0);
@@ -445,6 +454,7 @@ amdiommu_attach(device_t dev)
 	bool res;
 
 	sc = device_get_softc(dev);
+	sc->iommu.unit = device_get_unit(dev);
 	sc->iommu.dev = dev;
 
 	error = pci_find_cap(dev, PCIY_SECDEV, &sc->seccap_reg);
@@ -879,6 +889,9 @@ amdiommu_find_unit(device_t dev, struct amdiommu_unit **unitp, uint16_t *ridp,
 	int error, flags;
 	bool res;
 
+	if (!amdiommu_enable)
+		return (ENXIO);
+
 	if (device_get_devclass(device_get_parent(dev)) !=
 	    devclass_find("pci"))
 		return (ENXIO);
@@ -943,6 +956,9 @@ amdiommu_find_unit_for_ioapic(int apic_id, struct amdiommu_unit **unitp,
 	device_t apic_dev;
 	bool res;
 
+	if (!amdiommu_enable)
+		return (ENXIO);
+
 	bzero(&ifu, sizeof(ifu));
 	ifu.type = IFU_DEV_IOAPIC;
 	ifu.devno = apic_id;
@@ -992,6 +1008,9 @@ amdiommu_find_unit_for_hpet(device_t hpet, struct amdiommu_unit **unitp,
 	int hpet_no;
 	bool res;
 
+	if (!amdiommu_enable)
+		return (ENXIO);
+
 	hpet_no = hpet_get_uid(hpet);
 	bzero(&ifu, sizeof(ifu));
 	ifu.type = IFU_DEV_HPET;
@@ -1001,8 +1020,9 @@ amdiommu_find_unit_for_hpet(device_t hpet, struct amdiommu_unit **unitp,
 	res = amdiommu_ivrs_iterate_tbl(amdiommu_find_unit_scan_0x11,
 	    amdiommu_find_unit_scan_0x11, amdiommu_find_unit_scan_0x10, &ifu);
 	if (!res) {
-		printf("amdiommu cannot match hpet no %d in IVHD\n",
-		    hpet_no);
+		if (verbose)
+			printf("amdiommu cannot match hpet no %d in IVHD\n",
+			    hpet_no);
 		return (ENXIO);
 	}
 
@@ -1041,7 +1061,7 @@ amdiommu_find_method(device_t dev, bool verbose)
 
 	error = amdiommu_find_unit(dev, &unit, &rid, &dte, &edte, verbose);
 	if (error != 0) {
-		if (verbose)
+		if (verbose && amdiommu_enable)
 			device_printf(dev,
 			    "cannot find amdiommu unit, error %d\n",
 			    error);
