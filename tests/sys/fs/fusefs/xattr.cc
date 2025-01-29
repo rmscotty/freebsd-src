@@ -119,6 +119,31 @@ void expect_setxattr(uint64_t ino, const char *attr, const char *value,
 
 };
 
+class Xattr_7_32: public FuseTest {
+public:
+	virtual void SetUp() {
+		m_kernel_minor_version = 32;
+		FuseTest::SetUp();
+	}
+	
+void expect_setxattr_7_32(uint64_t ino, const char *attr, const char *value,
+	ProcessMockerT r)
+{
+	EXPECT_CALL(*m_mock, process(
+		ResultOf([=](auto in) {
+			const char *a = (const char*)in.body.bytes +
+				FUSE_COMPAT_SETXATTR_IN_SIZE;
+			const char *v = a + strlen(a) + 1;
+			return (in.header.opcode == FUSE_SETXATTR &&
+				in.header.nodeid == ino &&
+				0 == strcmp(attr, a) &&
+				0 == strcmp(value, v));
+		}, Eq(true)),
+		_)
+	).WillOnce(Invoke(r));
+}
+};
+
 class Getxattr: public Xattr {};
 
 class Listxattr: public Xattr {};
@@ -153,6 +178,7 @@ void TearDown() {
 
 class Removexattr: public Xattr {};
 class Setxattr: public Xattr {};
+class Setxattr_7_32: public Xattr_7_32 {};
 class RofsXattr: public Xattr {
 public:
 virtual void SetUp() {
@@ -728,6 +754,7 @@ TEST_F(Removexattr, system)
 		<< strerror(errno);
 }
 
+
 /*
  * If the filesystem returns ENOSYS, then it will be treated as a permanent
  * failure and all future VOP_SETEXTATTR calls will fail with EOPNOTSUPP
@@ -814,6 +841,91 @@ TEST_F(Setxattr, system)
 		value_len);
 	ASSERT_EQ(value_len, r) << strerror(errno);
 }
+
+
+/* 7_32 compat tests, */
+TEST_F(Setxattr_7_32, enosys)
+{
+	uint64_t ino = 42;
+	const char value[] = "whatever";
+	ssize_t value_len = strlen(value) + 1;
+	int ns = EXTATTR_NAMESPACE_USER;
+	ssize_t r;
+
+	expect_lookup(RELPATH, ino, S_IFREG | 0644, 0, 2);
+	expect_setxattr_7_32(ino, "user.foo", value, ReturnErrno(ENOSYS));
+
+	r = extattr_set_file(FULLPATH, ns, "foo", (const void*)value,
+		value_len);
+	ASSERT_EQ(-1, r);
+	EXPECT_EQ(EOPNOTSUPP, errno);
+
+	/* Subsequent attempts should not query the filesystem at all */
+	r = extattr_set_file(FULLPATH, ns, "foo", (const void*)value,
+		value_len);
+	ASSERT_EQ(-1, r);
+	EXPECT_EQ(EOPNOTSUPP, errno);
+}
+
+/*
+ * SETXATTR will return ENOTSUP if the namespace is invalid or the filesystem
+ * as currently configured doesn't support extended attributes.
+ */
+TEST_F(Setxattr_7_32, enotsup)
+{
+	uint64_t ino = 42;
+	const char value[] = "whatever";
+	ssize_t value_len = strlen(value) + 1;
+	int ns = EXTATTR_NAMESPACE_USER;
+	ssize_t r;
+
+	expect_lookup(RELPATH, ino, S_IFREG | 0644, 0, 1);
+	expect_setxattr_7_32(ino, "user.foo", value, ReturnErrno(ENOTSUP));
+
+	r = extattr_set_file(FULLPATH, ns, "foo", (const void*)value,
+		value_len);
+	ASSERT_EQ(-1, r);
+	EXPECT_EQ(ENOTSUP, errno);
+}
+
+/*
+ * Successfully set a user attribute.
+ */
+TEST_F(Setxattr_7_32, user)
+{
+	uint64_t ino = 42;
+	const char value[] = "whatever";
+	ssize_t value_len = strlen(value) + 1;
+	int ns = EXTATTR_NAMESPACE_USER;
+	ssize_t r;
+
+	expect_lookup(RELPATH, ino, S_IFREG | 0644, 0, 1);
+	expect_setxattr_7_32(ino, "user.foo", value, ReturnErrno(0));
+
+	r = extattr_set_file(FULLPATH, ns, "foo", (const void*)value,
+		value_len);
+	ASSERT_EQ(value_len, r) << strerror(errno);
+}
+
+/*
+ * Successfully set a system attribute.
+ */
+TEST_F(Setxattr_7_32, system)
+{
+	uint64_t ino = 42;
+	const char value[] = "whatever";
+	ssize_t value_len = strlen(value) + 1;
+	int ns = EXTATTR_NAMESPACE_SYSTEM;
+	ssize_t r;
+
+	expect_lookup(RELPATH, ino, S_IFREG | 0644, 0, 1);
+	expect_setxattr_7_32(ino, "system.foo", value, ReturnErrno(0));
+
+	r = extattr_set_file(FULLPATH, ns, "foo", (const void*)value,
+		value_len);
+	ASSERT_EQ(value_len, r) << strerror(errno);
+}
+/* end 7_32 compat */
 
 TEST_F(RofsXattr, deleteextattr_erofs)
 {

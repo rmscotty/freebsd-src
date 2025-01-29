@@ -2705,6 +2705,7 @@ fuse_vnop_setextattr(struct vop_setextattr_args *ap)
 	struct mount *mp = vnode_mount(vp);
 	struct thread *td = ap->a_td;
 	struct ucred *cred = ap->a_cred;
+	size_t struct_size = FUSE_COMPAT_SETXATTR_IN_SIZE;
 	char *prefix;
 	size_t len;
 	char *attr_str;
@@ -2746,8 +2747,6 @@ fuse_vnop_setextattr(struct vop_setextattr_args *ap)
 	    strlen(ap->a_name) + 1;
 
 	/* we want to be binary compatible */
-	size_t struct_size = FUSE_COMPAT_SETXATTR_IN_SIZE;
-	
 	if (fuse_libabi_geq(fuse_get_mpdata(mp), 7, 33))
 		struct_size = sizeof(*set_xattr_in);
 
