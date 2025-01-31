@@ -845,55 +845,7 @@ TEST_F(Setxattr, system)
 }
 
 
-/* 7_32 compat tests, */
-TEST_F(Setxattr_7_32, enosys)
-{
-	uint64_t ino = 42;
-	const char value[] = "whatever";
-	ssize_t value_len = strlen(value) + 1;
-	int ns = EXTATTR_NAMESPACE_USER;
-	ssize_t r;
-
-	expect_lookup(RELPATH, ino, S_IFREG | 0644, 0, 2);
-	expect_setxattr_7_32(ino, "user.foo", value, ReturnErrno(ENOSYS));
-
-	r = extattr_set_file(FULLPATH, ns, "foo", (const void*)value,
-		value_len);
-	ASSERT_EQ(-1, r);
-	EXPECT_EQ(EOPNOTSUPP, errno);
-
-	/* Subsequent attempts should not query the filesystem at all */
-	r = extattr_set_file(FULLPATH, ns, "foo", (const void*)value,
-		value_len);
-	ASSERT_EQ(-1, r);
-	EXPECT_EQ(EOPNOTSUPP, errno);
-}
-
-/*
- * SETXATTR will return ENOTSUP if the namespace is invalid or the filesystem
- * as currently configured doesn't support extended attributes.
- */
-TEST_F(Setxattr_7_32, enotsup)
-{
-	uint64_t ino = 42;
-	const char value[] = "whatever";
-	ssize_t value_len = strlen(value) + 1;
-	int ns = EXTATTR_NAMESPACE_USER;
-	ssize_t r;
-
-	expect_lookup(RELPATH, ino, S_IFREG | 0644, 0, 1);
-	expect_setxattr_7_32(ino, "user.foo", value, ReturnErrno(ENOTSUP));
-
-	r = extattr_set_file(FULLPATH, ns, "foo", (const void*)value,
-		value_len);
-	ASSERT_EQ(-1, r);
-	EXPECT_EQ(ENOTSUP, errno);
-}
-
-/*
- * Successfully set a user attribute.
- */
-TEST_F(Setxattr_7_32, user)
+TEST_F(Setxattr_7_32, ok)
 {
 	uint64_t ino = 42;
 	const char value[] = "whatever";
@@ -908,26 +860,6 @@ TEST_F(Setxattr_7_32, user)
 		value_len);
 	ASSERT_EQ(value_len, r) << strerror(errno);
 }
-
-/*
- * Successfully set a system attribute.
- */
-TEST_F(Setxattr_7_32, system)
-{
-	uint64_t ino = 42;
-	const char value[] = "whatever";
-	ssize_t value_len = strlen(value) + 1;
-	int ns = EXTATTR_NAMESPACE_SYSTEM;
-	ssize_t r;
-
-	expect_lookup(RELPATH, ino, S_IFREG | 0644, 0, 1);
-	expect_setxattr_7_32(ino, "system.foo", value, ReturnErrno(0));
-
-	r = extattr_set_file(FULLPATH, ns, "foo", (const void*)value,
-		value_len);
-	ASSERT_EQ(value_len, r) << strerror(errno);
-}
-/* end 7_32 compat */
 
 TEST_F(RofsXattr, deleteextattr_erofs)
 {
