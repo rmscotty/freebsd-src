@@ -705,7 +705,7 @@ struct fuse_fsync_in {
 struct fuse_setxattr_in {
 	uint32_t	size;
 	uint32_t	flags;
-	uint32_t	setxattr_flag;
+	uint32_t	setxattr_flags;
 	uint32_t	padding;
 };
 

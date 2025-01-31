@@ -110,6 +110,7 @@ void expect_setxattr(uint64_t ino, const char *attr, const char *value,
 			const char *v = a + strlen(a) + 1;
 			return (in.header.opcode == FUSE_SETXATTR &&
 				in.header.nodeid == ino &&
+				in.body.setxattr.size == (strlen(value) + 1) &&
 				0 == strcmp(attr, a) &&
 				0 == strcmp(value, v));
 		}, Eq(true)),
@@ -136,6 +137,7 @@ void expect_setxattr_7_32(uint64_t ino, const char *attr, const char *value,
 			const char *v = a + strlen(a) + 1;
 			return (in.header.opcode == FUSE_SETXATTR &&
 				in.header.nodeid == ino &&
+				in.body.setxattr.size == (strlen(value) + 1) &&
 				0 == strcmp(attr, a) &&
 				0 == strcmp(value, v));
 		}, Eq(true)),

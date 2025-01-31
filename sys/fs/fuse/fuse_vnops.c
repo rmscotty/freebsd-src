@@ -2750,7 +2750,6 @@ fuse_vnop_setextattr(struct vop_setextattr_args *ap)
 	if (fuse_libabi_geq(fuse_get_mpdata(mp), 7, 33))
 		struct_size = sizeof(*set_xattr_in);
 
-
 	fdisp_init(&fdi, len + struct_size + uio->uio_resid);
 	fdisp_make_vp(&fdi, FUSE_SETXATTR, vp, td, cred);
 
@@ -2758,7 +2757,7 @@ fuse_vnop_setextattr(struct vop_setextattr_args *ap)
 	set_xattr_in->size = uio->uio_resid;
 
 	if (fuse_libabi_geq(fuse_get_mpdata(mp), 7, 33)) {
-		set_xattr_in->flags = 0;
+		set_xattr_in->setxattr_flags = 0;
 		set_xattr_in->padding = 0;
 	}
 
