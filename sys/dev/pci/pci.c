@@ -353,8 +353,8 @@ static int pci_do_power_nodriver = 0;
 SYSCTL_INT(_hw_pci, OID_AUTO, do_power_nodriver, CTLFLAG_RWTUN,
     &pci_do_power_nodriver, 0,
     "Place a function into D3 state when no driver attaches to it.  0 means"
-    " disable.  1 means conservatively place devices into D3 state.  2 means"
-    " aggressively place devices into D3 state.  3 means put absolutely"
+    " disable.  1 means conservatively place function into D3 state.  2 means"
+    " aggressively place function into D3 state.  3 means put absolutely"
     " everything in D3 state.");
 
 int pci_do_power_resume = 1;
@@ -516,6 +516,27 @@ pci_find_class_from(uint8_t class, uint8_t subclass, device_t from)
 		}
 		if (dinfo->cfg.baseclass == class &&
 		    dinfo->cfg.subclass == subclass) {
+			return (dinfo->cfg.dev);
+		}
+	}
+
+	return (NULL);
+}
+
+device_t
+pci_find_base_class_from(uint8_t class, device_t from)
+{
+	struct pci_devinfo *dinfo;
+	bool found = false;
+
+	STAILQ_FOREACH(dinfo, &pci_devq, pci_links) {
+		if (from != NULL && found == false) {
+			if (from != dinfo->cfg.dev)
+				continue;
+			found = true;
+			continue;
+		}
+		if (dinfo->cfg.baseclass == class) {
 			return (dinfo->cfg.dev);
 		}
 	}
@@ -4094,7 +4115,6 @@ pci_add_resources(device_t bus, device_t dev, int force, uint32_t prefetchmask)
 			pci_add_map(bus, dev, q->arg1, rl, force, 0);
 
 	if (cfg->intpin > 0 && PCI_INTERRUPT_VALID(cfg->intline)) {
-#ifdef __PCI_REROUTE_INTERRUPT
 		/*
 		 * Try to re-route interrupts. Sometimes the BIOS or
 		 * firmware may leave bogus values in these registers.
@@ -4102,9 +4122,6 @@ pci_add_resources(device_t bus, device_t dev, int force, uint32_t prefetchmask)
 		 * have.
 		 */
 		pci_assign_interrupt(bus, dev, 1);
-#else
-		pci_assign_interrupt(bus, dev, 0);
-#endif
 	}
 
 	if (pci_usb_takeover && pci_get_class(dev) == PCIC_SERIALBUS &&

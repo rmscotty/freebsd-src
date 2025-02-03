@@ -51,6 +51,25 @@
 #   xargs -n1 | sort | uniq -d;
 # done
 
+# 20250129: libdevinfo bumped to version 7
+OLD_LIBS+=lib/libdevinfo.so.6
+
+# 20250123: Remove gvinum(8)
+OLD_FILES+=sbin/gvinum
+OLD_FILES+=usr/share/man/man8/gvinum.8.gz
+
+# 20250122: Remove publickey(5) stuff
+OLD_FILES+=usr/bin/chkey
+OLD_FILES+=usr/bin/keylogin
+OLD_FILES+=usr/bin/keylogout
+OLD_FILES+=usr/sbin/keyserv
+OLD_FILES+=usr/bin/newkey
+OLD_FILES+=usr/share/man/man1/chkey.1.gz
+OLD_FILES+=usr/share/man/man1/keylogin.1.gz
+OLD_FILES+=usr/share/man/man1/keylogin.1.gz
+OLD_FILES+=usr/share/man/man5/publickey.5.gz
+OLD_FILES+=usr/share/man/man8/keyserv.1.gz
+
 # 20241206: Remove Altera DE4 drivers
 OLD_FILES+=usr/share/man/man4/altera_atse.4.gz
 OLD_FILES+=usr/share/man/man4/altera_avgen.4.gz
@@ -737,11 +756,6 @@ OLD_FILES+=usr/tests/sys/netpfil/pf/divapp
 
 # 20240930: libmd bumped to version 7
 OLD_LIBS+=lib/libmd.so.6
-
-# 20240914 libpcap upgrade from 1.10.4 to 1.10.5
-OLD_FILES+=contrib/libpcap/pcap-haiku.cpp
-OLD_FILES+=contrib/libpcap/pcap-rpcap-int.h
-OLD_FILES+=contrib/libpcap/pcap-usb-linux-common.c
 
 # 20240827: retire fips.so
 OLD_LIBS+=usr/lib/ossl-modules/fips.so
