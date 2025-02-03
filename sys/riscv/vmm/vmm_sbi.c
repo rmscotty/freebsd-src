@@ -58,39 +58,90 @@
 #include <machine/sbi.h>
 
 #include "riscv.h"
+#include "vmm_fence.h"
 
 static int
 vmm_sbi_handle_rfnc(struct vcpu *vcpu, struct hypctx *hypctx)
 {
-	uint64_t hart_mask __unused;
-	uint64_t start __unused;
-	uint64_t size __unused;
-	uint64_t asid __unused;
+	struct vmm_fence fence;
+	uint64_t hart_mask;
+	uint64_t hart_mask_base;
 	uint64_t func_id;
+	struct hyp *hyp;
+	uint16_t maxcpus;
+	cpuset_t cpus;
+	int vcpu_id;
+	int i;
 
 	func_id = hypctx->guest_regs.hyp_a[6];
 	hart_mask = hypctx->guest_regs.hyp_a[0];
-	start = hypctx->guest_regs.hyp_a[2];
-	size = hypctx->guest_regs.hyp_a[3];
-	asid = hypctx->guest_regs.hyp_a[4];
+	hart_mask_base = hypctx->guest_regs.hyp_a[1];
 
-	dprintf("%s: %ld hart_mask %lx start %lx size %lx\n", __func__,
-	    func_id, hart_mask, start, size);
+	/* Construct vma_fence. */
 
-	/* TODO: implement remote sfence. */
+	fence.start = hypctx->guest_regs.hyp_a[2];
+	fence.size = hypctx->guest_regs.hyp_a[3];
+	fence.asid = hypctx->guest_regs.hyp_a[4];
 
 	switch (func_id) {
 	case SBI_RFNC_REMOTE_FENCE_I:
+		fence.type = VMM_RISCV_FENCE_I;
 		break;
 	case SBI_RFNC_REMOTE_SFENCE_VMA:
+		fence.type = VMM_RISCV_FENCE_VMA;
 		break;
 	case SBI_RFNC_REMOTE_SFENCE_VMA_ASID:
+		fence.type = VMM_RISCV_FENCE_VMA_ASID;
 		break;
 	default:
+		return (-1);
+	}
+
+	/* Construct cpuset_t from the mask supplied. */
+
+	CPU_ZERO(&cpus);
+	hyp = hypctx->hyp;
+	maxcpus = vm_get_maxcpus(hyp->vm);
+	for (i = 0; i < maxcpus; i++) {
+		vcpu = vm_vcpu(hyp->vm, i);
+		if (vcpu == NULL)
+			continue;
+		vcpu_id = vcpu_vcpuid(vcpu);
+		if (hart_mask_base != -1UL) {
+			if (vcpu_id < hart_mask_base)
+				continue;
+			if (!(hart_mask & (1UL << (vcpu_id - hart_mask_base))))
+				continue;
+		}
+		CPU_SET(i, &cpus);
+	}
+
+	vmm_fence_add(hyp->vm, &cpus, &fence);
+
+	return (0);
+}
+
+static int
+vmm_sbi_handle_time(struct vcpu *vcpu, struct hypctx *hypctx)
+{
+	uint64_t func_id;
+	uint64_t next_val;
+	int ret;
+
+	func_id = hypctx->guest_regs.hyp_a[6];
+	next_val = hypctx->guest_regs.hyp_a[0];
+
+	switch (func_id) {
+	case SBI_TIME_SET_TIMER:
+		vtimer_set_timer(hypctx, next_val);
+		ret = 0;
+		break;
+	default:
+		ret = -1;
 		break;
 	}
 
-	hypctx->guest_regs.hyp_a[0] = 0;
+	hypctx->guest_regs.hyp_a[0] = ret;
 
 	return (0);
 }
@@ -147,6 +198,7 @@ vmm_sbi_ecall(struct vcpu *vcpu, bool *retu)
 {
 	int sbi_extension_id __unused;
 	struct hypctx *hypctx;
+	int error;
 
 	hypctx = riscv_get_active_vcpu();
 	sbi_extension_id = hypctx->guest_regs.hyp_a[7];
@@ -163,9 +215,11 @@ vmm_sbi_ecall(struct vcpu *vcpu, bool *retu)
 
 	switch (sbi_extension_id) {
 	case SBI_EXT_ID_RFNC:
-		vmm_sbi_handle_rfnc(vcpu, hypctx);
+		error = vmm_sbi_handle_rfnc(vcpu, hypctx);
+		hypctx->guest_regs.hyp_a[0] = error;
 		break;
 	case SBI_EXT_ID_TIME:
+		vmm_sbi_handle_time(vcpu, hypctx);
 		break;
 	case SBI_EXT_ID_IPI:
 		vmm_sbi_handle_ipi(vcpu, hypctx);
