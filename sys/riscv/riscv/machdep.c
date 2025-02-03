@@ -113,10 +113,6 @@ int cold = 1;
 
 struct kva_md_info kmi;
 
-int64_t dcache_line_size;	/* The minimum D cache line size */
-int64_t icache_line_size;	/* The minimum I cache line size */
-int64_t idcache_line_size;	/* The minimum cache line size */
-
 #define BOOT_HART_INVALID	0xffffffff
 uint32_t boot_hart = BOOT_HART_INVALID;	/* The hart we booted on. */
 
@@ -223,8 +219,18 @@ cpu_flush_dcache(void *ptr, size_t len)
 int
 cpu_est_clockrate(int cpu_id, uint64_t *rate)
 {
+	struct pcpu *pc;
 
-	panic("cpu_est_clockrate");
+	pc = pcpu_find(cpu_id);
+	if (pc == NULL || rate == NULL)
+		return (EINVAL);
+
+	if (pc->pc_clock == 0)
+		return (EOPNOTSUPP);
+
+	*rate = pc->pc_clock;
+
+	return (0);
 }
 
 void
@@ -328,17 +334,6 @@ try_load_dtb(caddr_t kmdp)
 		panic("OF_init failed with the found device tree");
 }
 #endif
-
-static void
-cache_setup(void)
-{
-
-	/* TODO */
-
-	dcache_line_size = 0;
-	icache_line_size = 0;
-	idcache_line_size = 0;
-}
 
 /*
  * Fake up a boot descriptor table.
@@ -549,8 +544,6 @@ initriscv(struct riscv_bootparams *rvbp)
 
 	/* Do basic tuning, hz etc */
 	init_param1();
-
-	cache_setup();
 
 #ifdef FDT
 	/*

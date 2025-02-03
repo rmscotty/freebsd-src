@@ -176,12 +176,15 @@
  *
  *  7.32
  *  - add flags to fuse_attr, add FUSE_ATTR_SUBMOUNT, add FUSE_SUBMOUNTS
+<<<<<<< HEAD
  *
  *  7.33
  *  - add FUSE_HANDLE_KILLPRIV_V2, FUSE_WRITE_KILL_SUIDGID, FATTR_KILL_SUIDGID
  *  - add FUSE_OPEN_KILL_SUIDGID
  *  - extend fuse_setxattr_in, add FUSE_SETXATTR_EXT
  *  - add FUSE_SETXATTR_ACL_KILL_SGID
+=======
+>>>>>>> main
  */
 
 #ifndef _FUSE_FUSE_KERNEL_H
@@ -217,7 +220,11 @@
 #define FUSE_KERNEL_VERSION 7
 
 /** Minor version number of this interface */
+<<<<<<< HEAD
 #define FUSE_KERNEL_MINOR_VERSION 33
+=======
+#define FUSE_KERNEL_MINOR_VERSION 32
+>>>>>>> main
 
 /** The node ID of the root inode */
 #define FUSE_ROOT_ID 1
@@ -328,12 +335,15 @@ struct fuse_file_lock {
  *		       foffset and moffset fields in struct
  *		       fuse_setupmapping_out and fuse_removemapping_one.
  * FUSE_SUBMOUNTS: kernel supports auto-mounting directory submounts
+<<<<<<< HEAD
  * FUSE_HANDLE_KILLPRIV_V2: fs kills suid/sgid/cap on write/chown/trunc.
  *			Upon write/truncate suid/sgid is only killed if caller
  *			does not have CAP_FSETID. Additionally upon
  *			write/truncate sgid is killed only if file has group
  *			execute permission. (Same as Linux VFS behavior).
  * FUSE_SETXATTR_EXT:	Server supports extended struct fuse_setxattr_in
+=======
+>>>>>>> main
  */
 #define FUSE_ASYNC_READ		(1 << 0)
 #define FUSE_POSIX_LOCKS	(1 << 1)
@@ -363,8 +373,11 @@ struct fuse_file_lock {
 #define FUSE_EXPLICIT_INVAL_DATA (1 << 25)
 #define FUSE_MAP_ALIGNMENT	(1 << 26)
 #define FUSE_SUBMOUNTS		(1 << 27)
+<<<<<<< HEAD
 #define FUSE_HANDLE_KILLPRIV_V2	(1 << 28)
 #define FUSE_SETXATTR_EXT	(1 << 29)
+=======
+>>>>>>> main
 
 #ifdef linux
 /**
@@ -396,6 +409,7 @@ struct fuse_file_lock {
  *
  * FUSE_WRITE_CACHE: delayed write from page cache, file handle is guessed
  * FUSE_WRITE_LOCKOWNER: lock_owner field is valid
+<<<<<<< HEAD
  * FUSE_WRITE_KILL_SUIDGID: kill suid and sgid bits
  */
 #define FUSE_WRITE_CACHE	(1 << 0)
@@ -404,6 +418,13 @@ struct fuse_file_lock {
 
 /* Obsolete alias; this flag implies killing suid/sgid only. */
 #define FUSE_WRITE_KILL_PRIV	FUSE_WRITE_KILL_SUIDGID
+=======
+ * FUSE_WRITE_KILL_PRIV: kill suid and sgid bits
+ */
+#define FUSE_WRITE_CACHE	(1 << 0)
+#define FUSE_WRITE_LOCKOWNER	(1 << 1)
+#define FUSE_WRITE_KILL_PRIV	(1 << 2)
+>>>>>>> main
 
 /**
  * Read flags
@@ -453,10 +474,15 @@ struct fuse_file_lock {
 
 /**
  * fuse_attr flags
+<<<<<<< HEAD
+=======
+ *
+>>>>>>> main
  * FUSE_ATTR_SUBMOUNT: Object is a submount root
  */
 #define FUSE_ATTR_SUBMOUNT      (1 << 0)
 
+<<<<<<< HEAD
 /**
  * Open flags
  * FUSE_OPEN_KILL_SUIDGID: Kill suid and sgid if executable
@@ -469,6 +495,8 @@ struct fuse_file_lock {
  */
 #define FUSE_SETXATTR_ACL_KILL_SGID	(1 << 0)
 
+=======
+>>>>>>> main
 enum fuse_opcode {
 	FUSE_LOOKUP		= 1,
 	FUSE_FORGET		= 2,  /* no reply */
@@ -523,7 +551,11 @@ enum fuse_opcode {
 	CUSE_INIT		= 4096,
 	/* Reserved opcodes: helpful to detect structure endian-ness */
 	CUSE_INIT_BSWAP_RESERVED	= 1048576,	/* CUSE_INIT << 8 */
+<<<<<<< HEAD
 	FUSE_INIT_BSWAP_RESERVED	= 436207616,	/* FUSE_INIT << 24 */	
+=======
+	FUSE_INIT_BSWAP_RESERVED	= 436207616,	/* FUSE_INIT << 24 */
+>>>>>>> main
 #endif /* linux */
 };
 
@@ -961,6 +993,10 @@ struct fuse_copy_file_range_in {
 	uint64_t	flags;
 };
 
+<<<<<<< HEAD
+=======
+
+>>>>>>> main
 #define FUSE_SETUPMAPPING_FLAG_WRITE (1ull << 0)
 #define FUSE_SETUPMAPPING_FLAG_READ (1ull << 1)
 struct fuse_setupmapping_in {
@@ -989,6 +1025,10 @@ struct fuse_removemapping_one {
 };
 
 #define FUSE_REMOVEMAPPING_MAX_ENTRY   \
+<<<<<<< HEAD
 		(PAGE_SIZE / sizeof(struct fuse_removemapping_one))
+=======
+	(PAGE_SIZE / sizeof(struct fuse_removemapping_one))
+>>>>>>> main
 
 #endif /* _FUSE_FUSE_KERNEL_H */
