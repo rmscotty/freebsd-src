@@ -456,7 +456,6 @@ struct fuse_file_lock {
 
 /**
  * fuse_attr flags
- *
  * FUSE_ATTR_SUBMOUNT: Object is a submount root
  */
 #define FUSE_ATTR_SUBMOUNT      (1 << 0)
@@ -636,14 +635,14 @@ struct fuse_setattr_in {
 
 struct fuse_open_in {
 	uint32_t	flags;
-	uint32_t	open_flags;	/* FUSE_OPEN_... */
+	uint32_t	open_flags;   /* FUSE_OPEN_... */
 };
 
 struct fuse_create_in {
 	uint32_t	flags;
 	uint32_t	mode;
 	uint32_t	umask;
-	uint32_t	open_flags;	/* FUSE_OPEN_... */
+	uint32_t	open_flags;   /* FUSE_OPEN_... */
 };
 
 struct fuse_open_out {
@@ -711,7 +710,7 @@ struct fuse_setxattr_in {
 	uint32_t	size;
 	uint32_t	flags;
 	uint32_t	setxattr_flags;
- 	uint32_t	padding;	
+	uint32_t	padding;
 };
 
 struct fuse_listxattr_in {
