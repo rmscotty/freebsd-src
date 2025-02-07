@@ -479,12 +479,23 @@ struct fuse_file_lock {
 
 /**
  * fuse_attr flags
- *
  * FUSE_ATTR_SUBMOUNT: Object is a submount root
  * FUSE_ATTR_DAX: Enable DAX for this file in per inode DAX mode
  */
 #define FUSE_ATTR_SUBMOUNT      (1 << 0)
 #define FUSE_ATTR_DAX		(1 << 1)
+
+/**
+ * Open flags
+ * FUSE_OPEN_KILL_SUIDGID: Kill suid and sgid if executable
+ */
+#define FUSE_OPEN_KILL_SUIDGID	(1 << 0)
+
+/**
+ * setxattr flags
+ * FUSE_SETXATTR_ACL_KILL_SGID: Clear SGID when system.posix_acl_access is set
+ */
+#define FUSE_SETXATTR_ACL_KILL_SGID	(1 << 0)
 
 /**
  * Open flags
@@ -661,14 +672,14 @@ struct fuse_setattr_in {
 
 struct fuse_open_in {
 	uint32_t	flags;
-	uint32_t	open_flags;	/* FUSE_OPEN_... */
+	uint32_t	open_flags;   /* FUSE_OPEN_... */
 };
 
 struct fuse_create_in {
 	uint32_t	flags;
 	uint32_t	mode;
 	uint32_t	umask;
-	uint32_t	open_flags;	/* FUSE_OPEN_... */
+	uint32_t	open_flags;   /* FUSE_OPEN_... */
 };
 
 struct fuse_open_out {
@@ -736,7 +747,7 @@ struct fuse_setxattr_in {
 	uint32_t	size;
 	uint32_t	flags;
 	uint32_t	setxattr_flags;
- 	uint32_t	padding;	
+	uint32_t	padding;
 };
 
 struct fuse_listxattr_in {
