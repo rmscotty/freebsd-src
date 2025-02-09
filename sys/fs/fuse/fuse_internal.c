@@ -1109,6 +1109,10 @@ fuse_internal_send_init(struct fuse_data *data, struct thread *td)
 	 * FUSE_ABORT_ERROR: not yet implemented
 	 * FUSE_CACHE_SYMLINKS: not yet implemented
 	 * FUSE_MAX_PAGES: not yet implemented
+	 * FUSE_EXPLICIT_INVAL_DATA: not yet implemented
+	 * FUSE_HANDLE_KILLPRIV_V2: not yet implemented
+	 * FUSE_SETXATTR_EXT: not yet implemented
+	 * FUSE_INIT_EXT: not yet implemented
 	 */
 	fiii->flags = FUSE_ASYNC_READ | FUSE_POSIX_LOCKS | FUSE_EXPORT_SUPPORT
 		| FUSE_BIG_WRITES | FUSE_WRITEBACK_CACHE
