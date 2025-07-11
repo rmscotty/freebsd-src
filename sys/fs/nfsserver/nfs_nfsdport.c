@@ -449,6 +449,7 @@ nfsvno_getattr(struct vnode *vp, struct nfsvattr *nvap,
 	}
 
 	nvap->na_bsdflags = 0;
+	nvap->na_flags = 0;
 	error = VOP_GETATTR(vp, &nvap->na_vattr, nd->nd_cred);
 	if (lockedit != 0)
 		NFSVOPUNLOCK(vp);
@@ -1651,10 +1652,11 @@ nfsvno_rename(struct nameidata *fromndp, struct nameidata *tondp,
 	}
 	if (fvp == tvp) {
 		/*
-		 * If source and destination are the same, there is nothing to
-		 * do. Set error to -1 to indicate this.
+		 * If source and destination are the same, there is
+		 * nothing to do. Set error to EJUSTRETURN to indicate
+		 * this.
 		 */
-		error = -1;
+		error = EJUSTRETURN;
 		goto out;
 	}
 	if (nd->nd_flag & ND_NFSV4) {
@@ -1696,10 +1698,26 @@ nfsvno_rename(struct nameidata *fromndp, struct nameidata *tondp,
 		    " dsdvp=%p\n", dsdvp[0]);
 	}
 out:
-	if (!error) {
+	mp = NULL;
+	if (error == 0) {
+		error = VOP_GETWRITEMOUNT(tondp->ni_dvp, &mp);
+		if (error == 0) {
+			if (mp == NULL) {
+				error = ENOENT;
+			} else {
+				error = lockmgr(&mp->mnt_renamelock,
+				    LK_EXCLUSIVE | LK_NOWAIT, NULL);
+				if (error != 0)
+					error = ERELOOKUP;
+			}
+		}
+	}
+	if (error == 0) {
 		error = VOP_RENAME(fromndp->ni_dvp, fromndp->ni_vp,
 		    &fromndp->ni_cnd, tondp->ni_dvp, tondp->ni_vp,
 		    &tondp->ni_cnd);
+		lockmgr(&mp->mnt_renamelock, LK_RELEASE, 0);
+		vfs_rel(mp);
 	} else {
 		if (tdvp == tvp)
 			vrele(tdvp);
@@ -1709,8 +1727,13 @@ out:
 			vput(tvp);
 		vrele(fromndp->ni_dvp);
 		vrele(fvp);
-		if (error == -1)
+		if (error == EJUSTRETURN) {
 			error = 0;
+		} else if (error == ERELOOKUP && mp != NULL) {
+			lockmgr(&mp->mnt_renamelock, LK_EXCLUSIVE, 0);
+			lockmgr(&mp->mnt_renamelock, LK_RELEASE, 0);
+			vfs_rel(mp);
+		}
 	}
 
 	/*
@@ -3127,6 +3150,9 @@ nfsv4_sattr(struct nfsrv_descript *nd, vnode_t vp, struct nfsvattr *nvap,
 		bitpos = NFSATTRBIT_MAX;
 	} else {
 		bitpos = 0;
+		if (NFSISSET_ATTRBIT(attrbitp, NFSATTRBIT_HIDDEN) ||
+		    NFSISSET_ATTRBIT(attrbitp, NFSATTRBIT_SYSTEM))
+			nvap->na_flags = 0;
 	}
 	moderet = 0;
 	for (; bitpos < NFSATTRBIT_MAX; bitpos++) {
@@ -3163,9 +3189,11 @@ nfsv4_sattr(struct nfsrv_descript *nd, vnode_t vp, struct nfsvattr *nvap,
 			attrsum += NFSX_UNSIGNED;
 			break;
 		case NFSATTRBIT_HIDDEN:
-			NFSM_DISSECT(tl, u_int32_t *, NFSX_UNSIGNED);
-			if (!nd->nd_repstat)
-				nd->nd_repstat = NFSERR_ATTRNOTSUPP;
+			NFSM_DISSECT(tl, uint32_t *, NFSX_UNSIGNED);
+			if (nd->nd_repstat == 0) {
+				if (*tl == newnfs_true)
+					nvap->na_flags |= UF_HIDDEN;
+			}
 			attrsum += NFSX_UNSIGNED;
 			break;
 		case NFSATTRBIT_MIMETYPE:
@@ -3240,9 +3268,11 @@ nfsv4_sattr(struct nfsrv_descript *nd, vnode_t vp, struct nfsvattr *nvap,
 			attrsum += (NFSX_UNSIGNED + NFSM_RNDUP(j));
 			break;
 		case NFSATTRBIT_SYSTEM:
-			NFSM_DISSECT(tl, u_int32_t *, NFSX_UNSIGNED);
-			if (!nd->nd_repstat)
-				nd->nd_repstat = NFSERR_ATTRNOTSUPP;
+			NFSM_DISSECT(tl, uint32_t *, NFSX_UNSIGNED);
+			if (nd->nd_repstat == 0) {
+				if (*tl == newnfs_true)
+					nvap->na_flags |= UF_SYSTEM;
+			}
 			attrsum += NFSX_UNSIGNED;
 			break;
 		case NFSATTRBIT_TIMEACCESSSET:
