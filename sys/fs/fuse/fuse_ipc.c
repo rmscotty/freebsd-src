@@ -700,7 +700,11 @@ fuse_body_audit(struct fuse_ticket *ftick, size_t blen)
 		break;
 
 	case FUSE_OPEN:
-		err = (blen == sizeof(struct fuse_open_out)) ? 0 : EINVAL;
+		if (fuse_libabi_geq(ftick->tk_data, 7, 47)) {
+			err = (blen == sizeof(struct fuse_open_out)) ? 0 : EINVAL;
+		} else {
+			err = (blen == FUSE_COMPAT_OPEN_OUT_SIZE) ? 0: EINVAL;
+		}
 		break;
 
 	case FUSE_READ:
@@ -763,7 +767,11 @@ fuse_body_audit(struct fuse_ticket *ftick, size_t blen)
 		break;
 
 	case FUSE_OPENDIR:
-		err = (blen == sizeof(struct fuse_open_out)) ? 0 : EINVAL;
+		if (fuse_libabi_geq(ftick->tk_data, 7, 47)) {
+			err = (blen == sizeof(struct fuse_open_out)) ? 0 : EINVAL;
+		} else {
+			err = (blen == FUSE_COMPAT_OPEN_OUT_SIZE) ? 0: EINVAL;
+		}
 		break;
 
 	case FUSE_READDIR:
@@ -798,12 +806,16 @@ fuse_body_audit(struct fuse_ticket *ftick, size_t blen)
 		break;
 
 	case FUSE_CREATE:
-		if (fuse_libabi_geq(ftick->tk_data, 7, 9)) {
+		if (fuse_libabi_geq(ftick->tk_data, 7, 47)) {
 			err = (blen == sizeof(struct fuse_entry_out) +
-			    sizeof(struct fuse_open_out)) ? 0 : EINVAL;
+			       sizeof(struct fuse_open_out)) ? 0 : EINVAL;
+		} else if (fuse_libabi_geq(ftick->tk_data, 7, 9)
+			   && fuse_libabi_lt(ftick->tk_data, 7, 47)) {
+			err = (blen == sizeof(struct fuse_entry_out) +
+			       FUSE_COMPAT_OPEN_OUT_SIZE) ? 0 : EINVAL;
 		} else {
 			err = (blen == FUSE_COMPAT_ENTRY_OUT_SIZE +
-			    sizeof(struct fuse_open_out)) ? 0 : EINVAL;
+			       FUSE_COMPAT_OPEN_OUT_SIZE) ? 0 : EINVAL;
 		}
 		break;
 

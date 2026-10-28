@@ -401,6 +401,14 @@ fuse_libabi_geq(struct fuse_data *data, uint32_t abi_maj, uint32_t abi_min)
 	     data->fuse_libabi_minor >= abi_min));
 }
 
+static inline bool
+fuse_libabi_lt(struct fuse_data *data, uint32_t abi_maj, uint32_t abi_min)
+{
+	return (data->fuse_libabi_major < abi_maj ||
+	    (data->fuse_libabi_major == abi_maj &&
+	     data->fuse_libabi_minor < abi_min));
+}
+
 /* Print msg as a warning to the console, but no more than once per session */
 void fuse_warn(struct fuse_data *data, unsigned flag, const char *msg);
 
