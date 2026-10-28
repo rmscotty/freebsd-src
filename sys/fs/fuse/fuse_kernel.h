@@ -250,6 +250,15 @@
  *  - add bufpool offset field to fuse_uring_ent_in_out struct
  *  - add FUSE_URING_ZERO_COPY, FUSE_URING_ENT_ZERO_COPY, and
  *    FOPEN_IO_URING_ZERO_COPY flag
+ *
+ *  7.47
+ *  - add FUSE_HAS_SYNCFS opt-in flag for privileged userspace servers
+ *  - add FUSE_PASSTHROUGH_V2
+ *  - add FUSE_DEV_IOC_BACKING_CREATE, struct fuse_backing_create_in
+ *  - add FUSE_NOTIFY_BACKING_REMOVE, struct fuse_notify_backing_remove_out
+ *  - add backing_id_64 to fuse_open_out
+ *  - add FUSE_NOTIFY_BACKING_MAP, fuse_notify_backing_map_out, fuse_extent
+ *  - add FUSE_BACKING_MAP_CREATE, FUSE_BACKING_MAP_CYCLIC
  */
 
 #ifndef _FUSE_FUSE_KERNEL_H
@@ -285,7 +294,7 @@
 #define FUSE_KERNEL_VERSION 7
 
 /** Minor version number of this interface */
-#define FUSE_KERNEL_MINOR_VERSION 46
+#define FUSE_KERNEL_MINOR_VERSION 47
 
 /** The node ID of the root inode */
 #define FUSE_ROOT_ID 1
@@ -466,6 +475,13 @@ struct fuse_file_lock {
  * FUSE_REQUEST_TIMEOUT: kernel supports timing out requests.
  *			 init_out.request_timeout contains the timeout (in secs)
  * FUSE_HAS_IO_URING_BUFPOOL: kernel supports io-uring buffer pools
+ * FUSE_HAS_SYNCFS: server requests that syncfs()/sync() be propagated as
+ *		FUSE_SYNCFS requests.  Since an untrusted server can use this
+ *		to stall sync(), it is only honored when /dev/fuse was opened
+ *		with CAP_SYS_ADMIN in the initial user namespace (the same
+ *		privilege that mounting virtiofs or fuseblk requires).
+ *		Insufficiently privileged servers ignore it.
+ * FUSE_PASSTHROUGH_V2: use 64 bit server allocated backing ID
  */
 #define FUSE_ASYNC_READ		(1 << 0)
 #define FUSE_POSIX_LOCKS	(1 << 1)
@@ -515,6 +531,8 @@ struct fuse_file_lock {
 #define FUSE_OVER_IO_URING	(1ULL << 41)
 #define FUSE_REQUEST_TIMEOUT	(1ULL << 42)
 #define FUSE_HAS_IO_URING_BUFPOOL (1ULL << 43)
+#define FUSE_HAS_SYNCFS		(1ULL << 44)
+#define FUSE_PASSTHROUGH_V2	(1ULL << 45)
 
 #ifdef linux
 /**
@@ -636,6 +654,7 @@ struct fuse_file_lock {
 enum fuse_ext_type {
 	/* Types 0..31 are reserved for fuse_secctx_header */
 	FUSE_MAX_NR_SECCTX	= 31,
+	FUSE_EXT_GROUPS		= 32,
 };
 
 enum fuse_opcode {
@@ -710,6 +729,8 @@ enum fuse_notify_code {
 	FUSE_NOTIFY_RESEND = 7,
 	FUSE_NOTIFY_INC_EPOCH = 8,
 	FUSE_NOTIFY_PRUNE = 9,
+	FUSE_NOTIFY_BACKING_REMOVE = 10,
+	FUSE_NOTIFY_BACKING_MAP = 11,
 	FUSE_NOTIFY_CODE_MAX,
 };
 
@@ -833,10 +854,13 @@ struct fuse_create_in {
 	uint32_t	open_flags;   /* FUSE_OPEN_... */
 };
 
+#define FUSE_COMPAT_OPEN_OUT_SIZE 16
+
 struct fuse_open_out {
 	uint64_t	fh;
 	uint32_t	open_flags;
 	int32_t		backing_id;
+	uint64_t	backing_id_64;
 };
 
 struct fuse_release_in {
@@ -1173,12 +1197,20 @@ struct fuse_backing_map {
 	uint64_t	padding;
 };
 
+struct fuse_backing_create_in {
+	int32_t		fd;
+	uint32_t	padding;
+	uint64_t	backing_id;	/* Zero value is reserved */
+	uint64_t	spare[2];
+};
+
 /* Device ioctls: */
 #define FUSE_DEV_IOC_MAGIC	229
 #define FUSE_DEV_IOC_CLONE	_IOR(FUSE_DEV_IOC_MAGIC, 0, uint32_t)
-#define FUSE_DEV_IOC_BACKING_OPEN	_IOW(FUSE_DEV_IOC_MAGIC, 1, \
-					     struct fuse_backing_map)
+#define FUSE_DEV_IOC_BACKING_OPEN	_IOW(FUSE_DEV_IOC_MAGIC, 1, struct fuse_backing_map)
 #define FUSE_DEV_IOC_BACKING_CLOSE	_IOW(FUSE_DEV_IOC_MAGIC, 2, uint32_t)
+#define FUSE_DEV_IOC_SYNC_INIT		_IO(FUSE_DEV_IOC_MAGIC, 3)
+#define FUSE_DEV_IOC_BACKING_CREATE	_IOW(FUSE_DEV_IOC_MAGIC, 4, struct fuse_backing_create_in)
 
 struct fuse_lseek_in {
 	uint64_t	fh;
@@ -1204,6 +1236,37 @@ struct fuse_copy_file_range_in {
 /* For FUSE_COPY_FILE_RANGE_64 */
 struct fuse_copy_file_range_out {
 	uint64_t	bytes_copied;
+};
+
+struct fuse_notify_backing_remove_out {
+	uint64_t	backing_id;
+	uint64_t	reserved;
+};
+
+/**
+ * notify_map flags
+ *
+ * FUSE_BACKING_MAP_CREATE:	create backing with the supplied ID
+ * FUSE_BACKING_MAP_CYCLIC:	map repeats after last extent
+ */
+#define FUSE_BACKING_MAP_CREATE	(1 << 0)
+#define FUSE_BACKING_MAP_CYCLIC	(1 << 1)
+
+struct fuse_notify_backing_map_out {
+	uint64_t	backing_id;
+	uint32_t	num_extents;
+	uint32_t	flags;
+	uint64_t	reserved[2];
+};
+
+#define FUSE_MAX_EXTENTS 1365		/*  (1 << 16) / sizeof(struct fuse_extent) */
+
+struct fuse_extent {
+	uint64_t	offset;		/* offset of extent into parent backing */
+	uint64_t	length;		/* extent length */
+	uint64_t	backing_id;	/* target backing */
+	uint64_t	addr;		/* target offset within backing file/device */
+	uint64_t	reserved[2];
 };
 
 #define FUSE_SETUPMAPPING_FLAG_WRITE (1ull << 0)
@@ -1250,6 +1313,7 @@ struct fuse_secctx {
 	uint32_t	size;
 	uint32_t	padding;
 };
+
 /*
  * Contains the information about how many fuse_secctx structures are being
  * sent and what's the total size of all security contexts (including
@@ -1285,7 +1349,7 @@ struct fuse_supp_groups {
 };
 
 /**
- * Size of the ring buffer header
+ * define FUSE_URING_IN_OUT_HEADER_SZ - Size of the ring buffer header
  */
 #define FUSE_URING_IN_OUT_HEADER_SZ 128
 #define FUSE_URING_OP_IN_OUT_SZ 128
@@ -1317,34 +1381,52 @@ struct fuse_uring_ent_in_out {
 };
 
 /**
- * Header for all fuse-io-uring requests
+ * struct fuse_uring_req_header - Header for all fuse-io-uring requests
  */
 struct fuse_uring_req_header {
-	/* struct fuse_in_header / struct fuse_out_header */
+	/**
+	 * @in_out: struct fuse_in_header / struct fuse_out_header
+	 */
 	char in_out[FUSE_URING_IN_OUT_HEADER_SZ];
 
-	/* per op code header */
+	/**
+	 * @op_in: per op code header
+	 */
 	char op_in[FUSE_URING_OP_IN_OUT_SZ];
 
+	/**
+	 * @ring_ent_in_out: TBD
+	 */
 	struct fuse_uring_ent_in_out ring_ent_in_out;
 };
 
 /**
- * sqe commands to the kernel
+ * enum fuse_uring_cmd - sqe commands to the kernel
  */
 enum fuse_uring_cmd {
+	/** @FUSE_IO_URING_CMD_INVALID: invalid command value */
 	FUSE_IO_URING_CMD_INVALID = 0,
 
-	/* register the request buffer and fetch a fuse request */
+	/**
+	 * @FUSE_IO_URING_CMD_REGISTER: register the request buffer and
+	 * fetch a fuse request
+	 */
 	FUSE_IO_URING_CMD_REGISTER = 1,
 
-	/* commit fuse request result and fetch next request */
+	/**
+	 * @FUSE_IO_URING_CMD_COMMIT_AND_FETCH: commit fuse request result
+	 * and fetch next request
+	 */
 	FUSE_IO_URING_CMD_COMMIT_AND_FETCH = 2,
 
-	/* add a queue */
+	/**
+	 * @FUSE_IO_URING_CMD_ADD_QUEUE: add a queue
+	 */
 	FUSE_IO_URING_CMD_ADD_QUEUE = 3,
 
-	/* add a bufpool to a queue */
+	/**
+	 * @FUSE_IO_URING_CMD_ADD_BUFPOOL: add a bufpool to a queue
+	 */
 	FUSE_IO_URING_CMD_ADD_BUFPOOL = 4,
 };
 
