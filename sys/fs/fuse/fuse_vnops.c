@@ -1877,7 +1877,6 @@ fuse_vnop_open(struct vop_open_args *ap)
 	if (VN_ISDEV(vp) || vp->v_type == VFIFO)
 		return (EXTERROR(EOPNOTSUPP, "Unsupported vnode type",
 		    vp->v_type));
-		return ENXIO;
 
 	/* if default_permissions and file is append only, deny write requests */
 	if (checkperm) {
