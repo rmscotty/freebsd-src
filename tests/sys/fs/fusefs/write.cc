@@ -915,7 +915,7 @@ TEST_F(Write_7_8, write)
 	ssize_t bufsize = strlen(CONTENTS);
 
 	expect_lookup(RELPATH, ino, 0);
-	expect_open(ino, 0, 1);
+	expect_open_7_46(ino, 0, 1);
 	expect_write_7_8(ino, 0, bufsize, bufsize, CONTENTS);
 
 	fd = open(FULLPATH, O_WRONLY);

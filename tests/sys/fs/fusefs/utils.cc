@@ -351,6 +351,24 @@ void FuseTest::expect_open(uint64_t ino, uint32_t flags, int times)
 	})));
 }
 
+void FuseTest::expect_open_7_46(uint64_t ino, uint32_t flags, int times)
+{
+	EXPECT_CALL(*m_mock, process(
+		ResultOf([=](auto in) {
+			return (in.header.opcode == FUSE_OPEN &&
+				in.header.nodeid == ino);
+		}, Eq(true)),
+		_)
+	).Times(times)
+	.WillRepeatedly(Invoke(
+		ReturnImmediate([=](auto in __unused, auto& out) {
+		out.header.len = sizeof(out.header);
+		SET_OUT_HEADER_LEN(out, open_7_46);
+		out.body.open.fh = FH;
+		out.body.open.open_flags = flags;
+	})));
+}
+
 void FuseTest::expect_opendir(uint64_t ino)
 {
 	/* opendir(3) calls fstatfs */
@@ -373,6 +391,32 @@ void FuseTest::expect_opendir(uint64_t ino)
 	).WillOnce(Invoke(ReturnImmediate([=](auto in __unused, auto& out) {
 		out.header.len = sizeof(out.header);
 		SET_OUT_HEADER_LEN(out, open);
+		out.body.open.fh = FH;
+	})));
+}
+
+void FuseTest::expect_opendir_7_46(uint64_t ino)
+{
+	/* opendir(3) calls fstatfs */
+	EXPECT_CALL(*m_mock, process(
+		ResultOf([](auto in) {
+			return (in.header.opcode == FUSE_STATFS);
+		}, Eq(true)),
+		_)
+	).WillRepeatedly(Invoke(
+	ReturnImmediate([=](auto i __unused, auto& out) {
+		SET_OUT_HEADER_LEN(out, statfs);
+	})));
+
+	EXPECT_CALL(*m_mock, process(
+		ResultOf([=](auto in) {
+			return (in.header.opcode == FUSE_OPENDIR &&
+				in.header.nodeid == ino);
+		}, Eq(true)),
+		_)
+	).WillOnce(Invoke(ReturnImmediate([=](auto in __unused, auto& out) {
+		out.header.len = sizeof(out.header);
+		SET_OUT_HEADER_LEN(out, open_7_46);
 		out.body.open.fh = FH;
 	})));
 }

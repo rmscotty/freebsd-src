@@ -703,6 +703,9 @@ fuse_body_audit(struct fuse_ticket *ftick, size_t blen)
 		if (fuse_libabi_geq(ftick->tk_data, 7, 47)) {
 			err = (blen == sizeof(struct fuse_open_out)) ? 0 : EINVAL;
 		} else {
+			printf("(%ud, %ud) Actual: %zu vs %d\n",
+			       ftick->tk_data->fuse_libabi_major, ftick->tk_data->fuse_libabi_minor,
+			       blen, FUSE_COMPAT_OPEN_OUT_SIZE);
 			err = (blen == FUSE_COMPAT_OPEN_OUT_SIZE) ? 0: EINVAL;
 		}
 		break;

@@ -476,7 +476,7 @@ TEST_F(Fspacectl_7_18, ok)
 	buf = new char[length];
 
 	expect_lookup(RELPATH, ino, S_IFREG | 0644, fsize, 1);
-	expect_open(ino, 0, 1);
+	expect_open_7_46(ino, 0, 1);
 	expect_vop_stddeallocate(ino, offset, length);
 
 	fd = open(FULLPATH, O_RDWR);
@@ -769,7 +769,7 @@ TEST_F(PosixFallocate_7_18, eopnotsupp)
 	int fd;
 
 	expect_lookup(RELPATH, ino, S_IFREG | 0644, 0, 1);
-	expect_open(ino, 0, 1);
+	expect_open_7_46(ino, 0, 1);
 
 	fd = open(FULLPATH, O_RDWR);
 	ASSERT_LE(0, fd) << strerror(errno);

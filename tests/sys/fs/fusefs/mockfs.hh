@@ -79,11 +79,18 @@ extern int verbosity;
  */
 const uint32_t max_max_write = 0x20000;
 
-
 /* This struct isn't defined by fuse_kernel.h or libfuse, but it should be */
 struct fuse_create_out {
 	struct fuse_entry_out	entry;
 	struct fuse_open_out	open;
+};
+
+/* Protocol 7.46 version of struct fuse_open_out */
+struct fuse_open_out_7_46
+{
+  	uint64_t	fh;
+	uint32_t	open_flags;
+	uint32_t	padding;
 };
 
 /* Protocol 7.8 version of struct fuse_attr */
@@ -129,7 +136,13 @@ struct fuse_entry_out_7_8 {
 /* Output struct for FUSE_CREATE for protocol 7.8 servers */
 struct fuse_create_out_7_8 {
 	struct fuse_entry_out_7_8	entry;
-	struct fuse_open_out	open;
+	struct fuse_open_out_7_46	open;
+};
+
+/* Output struct for FUSE_CREATE for protocol 7.8 servers */
+struct fuse_create_out_7_11 {
+	struct fuse_entry_out		entry;
+	struct fuse_open_out_7_46	open;
 };
 
 /* Output struct for FUSE_INIT for protocol 7.22 and earlier servers */
@@ -203,6 +216,7 @@ union fuse_payloads_out {
 	fuse_bmap_out		bmap;
 	fuse_create_out		create;
 	fuse_create_out_7_8	create_7_8;
+	fuse_create_out_7_11	create_7_11;
 	/*
 	 * The protocol places no limits on the size of bytes.  Choose
 	 * a size big enough for anything we'll test.
@@ -221,7 +235,8 @@ union fuse_payloads_out {
 	/* The store structure should be followed by the data to store */
 	fuse_notify_store_out		store;
 	fuse_listxattr_out	listxattr;
-	fuse_open_out		open;
+	fuse_open_out 		open;
+	fuse_open_out_7_46	open_7_46;
 	fuse_statfs_out		statfs;
 	fuse_ioctl_out		ioctl;
 	/*

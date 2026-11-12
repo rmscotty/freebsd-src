@@ -1432,7 +1432,7 @@ TEST_F(Read_7_8, read)
 	uint8_t buf[bufsize];
 
 	expect_lookup(RELPATH, ino, bufsize);
-	expect_open(ino, 0, 1);
+	expect_open_7_46(ino, 0, 1);
 	expect_read(ino, 0, bufsize, bufsize, CONTENTS);
 
 	fd = open(FULLPATH, O_RDONLY);
