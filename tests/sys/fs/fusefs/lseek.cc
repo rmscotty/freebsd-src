@@ -324,7 +324,7 @@ TEST_F(LseekPathconf_7_23, already_enosys)
 	int fd;
 
 	expect_lookup(RELPATH, ino, S_IFREG | 0644, fsize, 1);
-	expect_open(ino, 0, 1);
+	expect_open_7_46(ino, 0, 1);
 	EXPECT_CALL(*m_mock, process(
 		ResultOf([=](auto in) {
 			return (in.header.opcode == FUSE_LSEEK);

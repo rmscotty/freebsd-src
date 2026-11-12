@@ -480,7 +480,7 @@ TEST_F(Create_7_11, ok)
 		.WillOnce(Invoke(ReturnErrno(ENOENT)));
 	expect_create(RELPATH, mode,
 		ReturnImmediate([=](auto in __unused, auto& out) {
-		SET_OUT_HEADER_LEN(out, create);
+		SET_OUT_HEADER_LEN(out, create_7_11);
 		out.body.create.entry.attr.mode = mode;
 		out.body.create.entry.nodeid = ino;
 		out.body.create.entry.entry_valid = UINT64_MAX;

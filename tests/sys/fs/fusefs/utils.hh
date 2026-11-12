@@ -179,11 +179,17 @@ class FuseTest : public ::testing::Test {
 	 */
 	void expect_open(uint64_t ino, uint32_t flags, int times);
 
+	/* The protocol 7.46 version of expect_open */
+	void expect_open_7_46(uint64_t ino, uint32_t flags, int times);
+
 	/*
 	 * Create an expectation that FUSE_OPENDIR will be called exactly once
 	 * for inode ino.
 	 */
 	void expect_opendir(uint64_t ino);
+
+	/* The protocol 7.46 version of expect_opendir */
+	void expect_opendir_7_46(uint64_t ino);
 
 	/*
 	 * Create an expectation that FUSE_READ will be called exactly once for

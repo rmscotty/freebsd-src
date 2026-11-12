@@ -104,6 +104,24 @@ virtual void SetUp() {
 	m_kernel_minor_version = 27;
 	CopyFileRange::SetUp();
 }
+
+void expect_open(uint64_t ino, uint32_t flags, int times, uint64_t fh)
+{
+	EXPECT_CALL(*m_mock, process(
+		ResultOf([=](auto in) {
+			return (in.header.opcode == FUSE_OPEN &&
+				in.header.nodeid == ino);
+		}, Eq(true)),
+		_)
+	).Times(times)
+	.WillRepeatedly(Invoke(
+		ReturnImmediate([=](auto in __unused, auto& out) {
+		out.header.len = sizeof(out.header);
+		SET_OUT_HEADER_LEN(out, open_7_46);
+		out.body.open.fh = fh;
+		out.body.open.open_flags = flags;
+	})));
+}
 };
 
 class CopyFileRangeNoAtime: public CopyFileRange {

@@ -492,7 +492,7 @@ TEST_F(Readdir_7_8, nodots)
 	DIR *dir;
 
 	expect_lookup(RELPATH, ino);
-	expect_opendir(ino);
+	expect_opendir_7_46(ino);
 
 	EXPECT_CALL(*m_mock, process(
 		ResultOf([=](auto in) {
