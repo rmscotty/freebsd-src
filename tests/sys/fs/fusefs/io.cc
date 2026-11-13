@@ -129,7 +129,7 @@ void SetUp()
 	}
 
 	expect_lookup(RELPATH, ino, S_IFREG | 0644, 0, 1);
-	expect_open(ino, m_direct_io ? FOPEN_DIRECT_IO : 0, 1);
+	expect_open_7_46(ino, m_direct_io ? FOPEN_DIRECT_IO : 0, 1);
 	EXPECT_CALL(*m_mock, process(
 		ResultOf([=](auto in) {
 			return (in.header.opcode == FUSE_WRITE &&
