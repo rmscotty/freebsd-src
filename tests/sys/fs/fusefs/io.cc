@@ -129,6 +129,7 @@ void SetUp()
 	}
 
 	expect_lookup(RELPATH, ino, S_IFREG | 0644, 0, 1);
+	// we test only kernel_vers_minor 27 and 28
 	expect_open_7_46(ino, m_direct_io ? FOPEN_DIRECT_IO : 0, 1);
 	EXPECT_CALL(*m_mock, process(
 		ResultOf([=](auto in) {

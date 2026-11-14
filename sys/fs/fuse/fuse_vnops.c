@@ -2261,7 +2261,7 @@ fuse_vnop_remove(struct vop_remove_args *ap)
 	struct vnode *vp = ap->a_vp;
 	struct componentname *cnp = ap->a_cnp;
 	struct fuse_data *data;
-	
+
 	struct vattr vattr, dattr;
 	int err;
 
@@ -2278,12 +2278,12 @@ fuse_vnop_remove(struct vop_remove_args *ap)
 		err = fuse_internal_getattr(dvp, &dattr, cnp->cn_cred, curthread);
 		if (err)
 			return (err);
-		
+
 		if ((vattr.va_flags & (NOUNLINK | IMMUTABLE | APPEND)) ||
 		    (dattr.va_flags & APPEND))
 			return (EPERM);
 	}
-	
+
 	if (vnode_isdir(vp)) {
 		return (EXTERROR(EPERM, "vnode is a directory"));
 	}
@@ -2379,7 +2379,7 @@ fuse_vnop_rename(struct vop_rename_args *ap)
 				tdvp, &tdvattr, tcnp->cn_cred, curthread);
 			if (err)
 				goto out;
-			
+
 			if ((tvattr.va_flags & (NOUNLINK | IMMUTABLE | APPEND)) ||
 			    (tdvattr.va_flags & (APPEND | IMMUTABLE))) {
 				err = EPERM;
@@ -2395,7 +2395,7 @@ fuse_vnop_rename(struct vop_rename_args *ap)
 			fdvp, &fdvattr, tcnp->cn_cred, curthread);
 		if (err)
 			goto out;
-		
+
 		if ((fvattr.va_flags & (NOUNLINK | IMMUTABLE | APPEND)) ||
 		    (fdvattr.va_flags & (APPEND | IMMUTABLE))) {
 			err = EPERM;
@@ -2410,7 +2410,7 @@ fuse_vnop_rename(struct vop_rename_args *ap)
 		}
 
 	}
-	
+
 	err = fuse_internal_rename(fdvp, fcnp, tdvp, tcnp);
 	if (err == 0) {
 		if (tdvp != fdvp)
@@ -2464,7 +2464,7 @@ fuse_vnop_rmdir(struct vop_rmdir_args *ap)
 	struct mount *mp;
 	struct fuse_data *data;
 	struct vattr dattr, iattr;
-	
+
 	mp = vnode_mount(vp);
 	data = fuse_get_mpdata(mp);
 
@@ -2493,7 +2493,7 @@ fuse_vnop_rmdir(struct vop_rmdir_args *ap)
 			return (EPERM);
 
 	}
-	
+
 	err = fuse_internal_remove(dvp, vp, ap->a_cnp, FUSE_RMDIR);
 
 	return err;
@@ -2537,7 +2537,7 @@ fuse_vnop_setattr(struct vop_setattr_args *ap)
 	if (vfs_isrdonly(mp)) {
 		return EROFS;
 	}
-	
+
 	if (vap->va_flags != VNOVAL) {
 		accmode |= VADMIN;
 		if (checkperm) {
@@ -2598,7 +2598,7 @@ fuse_vnop_setattr(struct vop_setattr_args *ap)
 			return (EPERM);
 
 	}
-	
+
 	if (vap->va_uid != (uid_t)VNOVAL) {
 		if (checkperm) {
 			/* Only root may change a file's owner */
